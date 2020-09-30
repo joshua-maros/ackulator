@@ -1,3 +1,5 @@
+use crate::typ::UnresolvedType;
+
 #[derive(Clone, Debug)]
 pub struct YamlNode {
     pub label: String,
@@ -9,7 +11,7 @@ pub enum YamlValue {
     Tree(Vec<YamlNode>),
     String(String),
     KeywordBase,
-    // DataType(UnresolvedDataType),
+    Type(UnresolvedType),
     // Expression(UnresolvedExpression),
 }
 
@@ -113,6 +115,8 @@ fn parse_top_level(data: &mut impl Iterator<Item = char>) -> Vec<YamlNode> {
             } else {
                 let value = if ch == '$' {
                     unimplemented!("Expression");
+                } else if ch == '<' {
+                    YamlValue::Type(crate::typ::parse_typ(data))
                 } else if ch == '"' {
                     parse_string(data)
                 } else {
