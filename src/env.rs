@@ -60,6 +60,13 @@ impl Environment {
         )
     }
 
+    pub fn format_value_detailed(&self, value: &Value) -> String {
+        match value {
+            Value::Scalar(scalar) => self.format_scalar_detailed(scalar),
+            Value::Vector => unimplemented!(),
+        }
+    }
+
     /// Returns the base unit of the given unit. For example, Meters^2*Seconds^-1 will return
     /// Length^2*Time^-1. Hz*Area^-1 will return Time^-1*Length^-2.
     pub fn base_unit_of(&self, unit: &CompositeUnit) -> CompositeUnitClass {

@@ -21,14 +21,14 @@ pub struct Unit {
     pub base_class: CompositeUnitClass,
 }
 
-#[derive(Clone, Debug)]
-pub struct Composite<T> {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Composite<T: Eq + Hash> {
     pub components: HashMap<T, i32>,
 }
 
 pub type CompositeUnit = Composite<UnitId>;
 pub type CompositeUnitClass = Composite<UnitClassId>;
-impl<T> Composite<T> {
+impl<T: Eq + Hash> Composite<T> {
     pub fn unitless() -> Self {
         Self {
             components: HashMap::new(),
