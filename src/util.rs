@@ -92,6 +92,7 @@ pub trait StorageWrapper<T> {
     fn store(&mut self, item: T) -> ItemId<T>;
     fn borrow(&self, item_id: ItemId<T>) -> &T;
     fn borrow_mut(&mut self, item_id: ItemId<T>) -> &mut T;
+    fn find(&self, predicate: impl Fn(&T) -> bool) -> Option<ItemId<T>>;
 }
 
 impl<T, S: StorageHolder<T>> StorageWrapper<T> for S {
@@ -105,5 +106,17 @@ impl<T, S: StorageHolder<T>> StorageWrapper<T> for S {
 
     fn borrow_mut(&mut self, item_id: ItemId<T>) -> &mut T {
         self.borrow_storage_mut().borrow_mut(item_id)
+    }
+
+    fn find(&self, predicate: impl Fn(&T) -> bool) -> Option<ItemId<T>> {
+        for (index, item) in self.borrow_storage().0.iter().enumerate() {
+            if predicate(item) {
+                return Some(ItemId {
+                    index,
+                    pd: std::marker::PhantomData,
+                });
+            }
+        }
+        None
     }
 }

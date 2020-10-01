@@ -1,36 +1,34 @@
-use crate::unit::CompositeUnit;
+use crate::unit::{CompositeUnit, CompositeUnitClass};
 
 #[derive(Clone, Debug)]
 pub struct Scalar {
-    value: f64,
-    value_unit: CompositeUnit,
-    display_unit: CompositeUnit,
-    precision: u32,
+    pub(crate) base_value: f64,
+    pub(crate) base_unit: CompositeUnitClass,
+    pub(crate) display_unit: CompositeUnit,
+    pub(crate) precision: u32,
 }
 
 impl Scalar {
-    pub fn new(value: f64, precision: u32, unit: CompositeUnit) -> Self {
+    pub(crate) fn new(
+        base_value: f64,
+        base_unit: CompositeUnitClass,
+        display_unit: CompositeUnit,
+        precision: u32,
+    ) -> Self {
+        assert!(precision > 0);
         Self {
-            value,
-            value_unit: unit.clone(),
-            display_unit: unit,
+            base_value,
+            base_unit,
+            display_unit,
             precision,
         }
     }
 
-    pub fn max_precision(value: f64, unit: CompositeUnit) -> Self {
-        Self {
-            value,
-            value_unit: unit.clone(),
-            display_unit: unit,
-            precision: std::u32::MAX,
-        }
-    }
-
     pub fn unitless(value: f64, precision: u32) -> Self {
+        assert!(precision > 0);
         Self {
-            value,
-            value_unit: CompositeUnit::unitless(),
+            base_value: value,
+            base_unit: CompositeUnitClass::unitless(),
             display_unit: CompositeUnit::unitless(),
             precision,
         }

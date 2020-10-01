@@ -165,7 +165,7 @@ fn add_metric_units(
         env.store(Unit {
             name: util::to_title_case(&format!("{}{}", full, name)),
             symbol,
-            base_ratio: prefixless_ratio / multiplier,
+            base_ratio: prefixless_ratio * multiplier,
             base_class: base_class.clone(),
         });
     }
@@ -177,7 +177,7 @@ pub fn add_default_units(env: &mut crate::env::Environment) {
         env,
         "grams",
         Symbol::plain("g".to_owned()),
-        1e-3, // The base unit is actually kilograms, so 1 gram is 1e-3 kilograms.
+        1e-3, // The base unit is actually kilograms, so there are 1e-3 kilograms per gram.
         mass.clone(),
     );
 
