@@ -1,38 +1,34 @@
-use crate::env::{UnitClassId, UnitId};
-use crate::formula::{Scalar, Symbol};
-use crate::util;
+use crate::formula::{Symbol};
+use crate::prelude::*;
+use crate::util::{self, ItemId};
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::ops::{Div, Mul};
 
+pub type UnitId = ItemId<Unit>;
+pub type UnitClassId = ItemId<UnitClass>;
+
 #[derive(Clone, Debug)]
-pub struct UnitClass {
-    pub name: String,
-    pub base: UnitId,
-}
+pub struct UnitClass(pub String);
 
 #[derive(Clone, Debug)]
 pub struct Unit {
-    pub class: UnitClassId,
     pub name: String,
     pub symbol: Symbol,
     /// How many of the base unit is represented by 1 of this unit.
-    pub base_ratio: Scalar,
-}
-
-impl Into<CompositeUnit> for UnitId {
-    fn into(self) -> CompositeUnit {
-        CompositeUnit {
-            components: vec![(self, 1)].into_iter().collect(),
-        }
-    }
+    pub base_ratio: f64,
+    /// Use Length^2 for area, Time^-1 for frequency, etc.
+    pub base_class: CompositeUnitClass,
 }
 
 #[derive(Clone, Debug)]
-pub struct CompositeUnit {
-    pub components: HashMap<UnitId, i32>,
+pub struct Composite<T> {
+    pub components: HashMap<T, i32>,
 }
 
-impl CompositeUnit {
+pub type CompositeUnit = Composite<UnitId>;
+pub type CompositeUnitClass = Composite<UnitClassId>;
+impl<T> Composite<T> {
     pub fn unitless() -> Self {
         Self {
             components: HashMap::new(),
@@ -40,7 +36,15 @@ impl CompositeUnit {
     }
 }
 
-impl Mul for CompositeUnit {
+impl<T: Eq + Hash> From<T> for Composite<T> {
+    fn from(other: T) -> Self {
+        Self {
+            components: vec![(other, 1)].into_iter().collect(),
+        }
+    }
+}
+
+impl<T: Eq + Hash> Mul for Composite<T> {
     type Output = Self;
 
     fn mul(mut self, rhs: Self) -> Self {
@@ -58,15 +62,31 @@ impl Mul for CompositeUnit {
     }
 }
 
-impl Mul<UnitId> for CompositeUnit {
+impl<T: Eq + Hash + Into<Composite<T>>> Mul<T> for Composite<T> {
     type Output = Self;
 
-    fn mul(self, rhs: UnitId) -> Self {
-        self * <UnitId as Into<CompositeUnit>>::into(rhs)
+    fn mul(self, rhs: T) -> Self {
+        self * rhs.into()
     }
 }
 
-impl Div for CompositeUnit {
+impl Mul for UnitId {
+    type Output = CompositeUnit;
+
+    fn mul(self, rhs: Self) -> CompositeUnit {
+        <UnitId as Into<CompositeUnit>>::into(self) * rhs
+    }
+}
+
+impl Mul for UnitClassId {
+    type Output = CompositeUnitClass;
+
+    fn mul(self, rhs: Self) -> CompositeUnitClass {
+        <UnitClassId as Into<CompositeUnitClass>>::into(self) * rhs
+    }
+}
+
+impl<T: Eq + Hash> Div for Composite<T> {
     type Output = Self;
 
     fn div(mut self, rhs: Self) -> Self {
@@ -84,11 +104,27 @@ impl Div for CompositeUnit {
     }
 }
 
-impl Div<UnitId> for CompositeUnit {
+impl<T: Eq + Hash + Into<Composite<T>>> Div<T> for Composite<T> {
     type Output = Self;
 
-    fn div(self, rhs: UnitId) -> Self {
-        self / <UnitId as Into<CompositeUnit>>::into(rhs)
+    fn div(self, rhs: T) -> Self {
+        self / rhs.into()
+    }
+}
+
+impl Div for UnitId {
+    type Output = CompositeUnit;
+
+    fn div(self, rhs: Self) -> CompositeUnit {
+        <UnitId as Into<CompositeUnit>>::into(self) / rhs
+    }
+}
+
+impl Div for UnitClassId {
+    type Output = CompositeUnitClass;
+
+    fn div(self, rhs: Self) -> CompositeUnitClass {
+        <UnitClassId as Into<CompositeUnitClass>>::into(self) / rhs
     }
 }
 
@@ -116,42 +152,102 @@ const METRIC_PREFIXES: [(&'static str, &'static str, f64); 21] = [
     ("Yocto", "y", 1e-24),
 ];
 
-fn make_metric_unit_templates(
+fn add_metric_units(
+    env: &mut crate::env::Environment,
     name: &str,
     symbol: Symbol,
-    base_prefix: usize,
-) -> Vec<crate::env::UnitTemplate> {
-    let base_multiplier = METRIC_PREFIXES[base_prefix].2;
-    let mut result: Vec<_> = METRIC_PREFIXES
-        .iter()
-        .map(|(full, prefix, multiplier)| {
-            let mut symbol = symbol.clone();
-            symbol.text = format!("{}{}", prefix, symbol.text);
-            crate::env::UnitTemplate {
-                name: util::to_title_case(&format!("{}{}", full, name)),
-                symbol,
-                base_ratio: base_multiplier / multiplier,
-            }
-        })
-        .collect();
-    result.swap(0, base_prefix);
-    result
+    prefixless_ratio: f64,
+    base_class: CompositeUnitClass,
+) {
+    for (full, prefix, multiplier) in &METRIC_PREFIXES {
+        let mut symbol = symbol.clone();
+        symbol.text = format!("{}{}", prefix, symbol.text);
+        env.store(Unit {
+            name: util::to_title_case(&format!("{}{}", full, name)),
+            symbol,
+            base_ratio: prefixless_ratio / multiplier,
+            base_class: base_class.clone(),
+        });
+    }
 }
 
 pub fn add_default_units(env: &mut crate::env::Environment) {
-    const KILO_BASE: usize = 7;
-    assert_eq!(METRIC_PREFIXES[KILO_BASE].2, 1e3);
-    const PLAIN_BASE: usize = 10;
-    assert_eq!(METRIC_PREFIXES[PLAIN_BASE].2, 1e0);
+    let mass: CompositeUnitClass = env.store(UnitClass("Mass".to_owned())).into();
+    add_metric_units(
+        env,
+        "grams",
+        Symbol::plain("g".to_owned()),
+        1e-3, // The base unit is actually kilograms, so 1 gram is 1e-3 kilograms.
+        mass.clone(),
+    );
 
-    {
-        // Mass
-        let mut templates = Vec::new();
-        templates.append(&mut make_metric_unit_templates(
-            "grams",
-            Symbol::plain("g".to_owned()),
-            KILO_BASE,
-        ));
-        env.build_unit_class("Mass".to_owned(), templates.into_iter());
-    }
+    let length: CompositeUnitClass = env.store(UnitClass("Length".to_owned())).into();
+    add_metric_units(
+        env,
+        "meters",
+        Symbol::plain("m".to_owned()),
+        1e0,
+        length.clone(),
+    );
+    const METERS_PER_FOOT: f64 = 1.0 / 3.28084;
+    env.store(Unit {
+        name: "Feet".to_owned(),
+        symbol: Symbol::plain("ft".to_owned()),
+        base_ratio: METERS_PER_FOOT,
+        base_class: length.clone(),
+    });
+    env.store(Unit {
+        name: "Inches".to_owned(),
+        symbol: Symbol::plain("in".to_owned()),
+        base_ratio: METERS_PER_FOOT / 12.0,
+        base_class: length.clone(),
+    });
+    env.store(Unit {
+        name: "Yards".to_owned(),
+        symbol: Symbol::plain("yd".to_owned()),
+        base_ratio: 3.0 * METERS_PER_FOOT,
+        base_class: length.clone(),
+    });
+    env.store(Unit {
+        name: "Chains".to_owned(),
+        symbol: Symbol::plain("ch".to_owned()),
+        base_ratio: 22.0 * 3.0 * METERS_PER_FOOT,
+        base_class: length.clone(),
+    });
+    env.store(Unit {
+        name: "Furlongs".to_owned(),
+        symbol: Symbol::plain("fr".to_owned()),
+        base_ratio: 220.0 * 3.0 * METERS_PER_FOOT,
+        base_class: length.clone(),
+    });
+    env.store(Unit {
+        name: "Miles".to_owned(),
+        symbol: Symbol::plain("mi".to_owned()),
+        base_ratio: 5280.0 * METERS_PER_FOOT,
+        base_class: length.clone(),
+    });
+    env.store(Unit {
+        name: "Leagues".to_owned(),
+        symbol: Symbol::plain("lea".to_owned()),
+        base_ratio: 15840.0 * METERS_PER_FOOT,
+        base_class: length.clone(),
+    });
+    env.store(Unit {
+        name: "Fathoms".to_owned(),
+        symbol: Symbol::plain("ftm".to_owned()),
+        base_ratio: 1.852,
+        base_class: length.clone(),
+    });
+    env.store(Unit {
+        name: "Cables".to_owned(),
+        symbol: Symbol::plain("cables".to_owned()),
+        base_ratio: 185.2,
+        base_class: length.clone(),
+    });
+    env.store(Unit {
+        name: "Nautical Miles".to_owned(),
+        symbol: Symbol::plain("nautical miles".to_owned()),
+        base_ratio: 1852.0,
+        base_class: length.clone(),
+    });
 }
