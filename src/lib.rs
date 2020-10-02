@@ -10,5 +10,5 @@ pub mod prelude {
     pub use crate::formula::{Formula, Function, Symbol, SymbolTable};
     pub use crate::unit::{CompositeUnit, Unit, UnitId};
     pub use crate::util::StorageWrapper;
-    pub use crate::value::{Scalar, Value};
+    pub use crate::value::{Entity, Scalar, Value};
 }

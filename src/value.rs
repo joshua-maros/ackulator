@@ -1,6 +1,7 @@
+use crate::formula::FormulaError;
 use crate::prelude::*;
 use crate::unit::CompositeUnitClass;
-use crate::formula::FormulaError;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub struct Scalar {
@@ -36,9 +37,29 @@ impl Scalar {
         }
     }
 
-    pub fn map(mut self, fun: impl FnOnce(f64) -> f64) -> Self {
+    pub fn map_in_place(&mut self, fun: &impl Fn(f64) -> f64) {
         self.base_value = fun(self.base_value);
-        self
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Entity {
+    pub(crate) properties: HashMap<Symbol, Value>,
+}
+
+impl Entity {
+    pub fn new() -> Self {
+        Self {
+            properties: HashMap::new(),
+        }
+    }
+
+    pub fn add_property(&mut self, name: Symbol, value: Value) {
+        self.properties.insert(name, value);
+    }
+
+    pub fn get_property(&self, name: &Symbol) -> Option<&Value> {
+        self.properties.get(name)
     }
 }
 
@@ -46,11 +67,18 @@ impl Scalar {
 pub enum Value {
     Scalar(Scalar),
     Vector,
+    Entity(Entity),
 }
 
 impl From<Scalar> for Value {
     fn from(value: Scalar) -> Value {
         Value::Scalar(value)
+    }
+}
+
+impl From<Entity> for Value {
+    fn from(value: Entity) -> Value {
+        Value::Entity(value)
     }
 }
 
@@ -81,6 +109,10 @@ impl Value {
                 display_unit: display_unit_transform(&lhs.display_unit, &rhs.display_unit),
                 precision,
             }))
+        } else if let V::Entity(..) = self {
+            Err(FormulaError::MathOnEntity)
+        } else if let V::Entity(..) = rhs {
+            Err(FormulaError::MathOnEntity)
         } else {
             unreachable!()
         }
@@ -162,10 +194,20 @@ impl Value {
         )
     }
 
-    pub fn map(self, fun: impl FnOnce(f64) -> f64) -> Self {
+    pub fn map_in_place(&mut self, fun: &impl Fn(f64) -> f64) {
         match self {
-            Self::Scalar(scalar) => Self::Scalar(scalar.map(fun)),
+            Self::Scalar(scalar) => scalar.map_in_place(fun),
             Self::Vector => unimplemented!(),
+            Self::Entity(entity) => {
+                for (_key, value) in entity.properties.iter_mut() {
+                    value.map_in_place(fun);
+                }
+            }
         }
+    }
+
+    pub fn map(mut self, fun: &impl Fn(f64) -> f64) -> Self {
+        self.map_in_place(fun);
+        self
     }
 }

@@ -69,6 +69,9 @@ pub enum FormulaError {
     MismatchedUnits,
     WrongNumberOfArgs,
     UndefinedSymbol,
+    ValueNotEntity,
+    UndefinedProperty,
+    MathOnEntity,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -125,6 +128,10 @@ pub enum Formula {
     Value(Value),
     PlainFunction { fun: Function, args: Vec<Formula> },
     Symbol(Symbol),
+    GetEntityProperty {
+        from: Box<Formula>,
+        prop_name: Symbol,
+    }
 }
 
 struct Ctx<'a> {
@@ -162,9 +169,9 @@ impl Formula {
                     Sub => arg_values[0].try_sub(&arg_values[1]),
                     Mul => arg_values[0].try_mul(&arg_values[1]),
                     Div => arg_values[0].try_div(&arg_values[1]),
-                    Sin => Ok(arg_values.pop().unwrap().map(f64::sin)),
-                    Cos => Ok(arg_values.pop().unwrap().map(f64::cos)),
-                    Tan => Ok(arg_values.pop().unwrap().map(f64::tan)),
+                    Sin => Ok(arg_values.pop().unwrap().map(&f64::sin)),
+                    Cos => Ok(arg_values.pop().unwrap().map(&f64::cos)),
+                    Tan => Ok(arg_values.pop().unwrap().map(&f64::tan)),
                 }
             },
             Self::Symbol(symbol) => {
@@ -172,6 +179,18 @@ impl Formula {
                     Ok(value.clone())
                 } else {
                     Err(FormulaError::UndefinedSymbol)
+                }
+            },
+            Self::GetEntityProperty { from, prop_name } => {
+                let value = from.try_compute_impl(ctx)?;
+                if let Value::Entity(entity) = value {
+                    if let Some(value) = entity.get_property(prop_name) {
+                        Ok(value.clone())
+                    } else {
+                        Err(FormulaError::UndefinedProperty)
+                    }
+                } else {
+                    Err(FormulaError::ValueNotEntity)
                 }
             }
         }

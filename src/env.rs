@@ -54,9 +54,28 @@ impl Environment {
     }
 
     pub fn format_value_detailed(&self, value: &Value) -> String {
+        self.format_value_detailed_impl(value, 0)
+    }
+
+    fn format_value_detailed_impl(&self, value: &Value, indent: usize) -> String {
         match value {
             Value::Scalar(scalar) => self.format_scalar_detailed(scalar),
             Value::Vector => unimplemented!(),
+            Value::Entity(entity) => {
+                let indent = indent + 4;
+                let mut result = "{\n".to_owned();
+                for (display_symbol, value) in entity.properties.iter() {
+                    result += &format!(
+                        "{0:>1$}{2:?}: {3}\n",
+                        "",
+                        indent,
+                        display_symbol,
+                        self.format_value_detailed_impl(value, indent)
+                    );
+                }
+                result += &format!("{0:>1$}}}", "", indent - 4);
+                result
+            }
         }
     }
 
@@ -77,6 +96,11 @@ impl Environment {
                 result
             }
             Formula::Symbol(symbol) => format!("{:?}", symbol),
+            Formula::GetEntityProperty { from, prop_name } => format!(
+                "{}'s {:?}",
+                self.format_formula_detailed_impl(from, indent),
+                prop_name
+            ),
         }
     }
 }
