@@ -81,6 +81,7 @@ impl Environment {
                 result += &format!("{0:>1$}]", "", indent);
                 result
             }
+            Formula::Symbol(symbol) => format!("{:?}", symbol),
         }
     }
 

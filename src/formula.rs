@@ -1,6 +1,8 @@
+use std::fmt::{self, Debug};
 use crate::prelude::*;
+use std::collections::HashMap;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub struct Symbol {
     pub text: String,
     pub superscript: Option<String>,
@@ -17,10 +19,24 @@ impl Symbol {
     }
 }
 
+impl Debug for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.text)?;
+        if let Some(sup) = &self.superscript {
+            write!(f, "^{}", sup)?;
+        }
+        if let Some(sub) = &self.subscript {
+            write!(f, "_{}", sub)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum FormulaError {
     MismatchedUnits,
     WrongNumberOfArgs,
+    UndefinedSymbol,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -66,14 +82,38 @@ impl From<Value> for Formula {
     }
 }
 
+impl From<Symbol> for Formula {
+    fn from(symbol: Symbol) -> Self {
+        Formula::Symbol(symbol)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Formula {
     Value(Value),
     PlainFunction { fun: Function, args: Vec<Formula> },
+    Symbol(Symbol),
+}
+
+struct Ctx<'a> {
+    environment: &'a Environment,
+    symbols: &'a HashMap<Symbol, Value>,
 }
 
 impl Formula {
-    pub fn try_compute(&self) -> Result<Value, FormulaError> {
+    pub fn try_compute(
+        &self,
+        environment: &Environment,
+        symbols: &HashMap<Symbol, Value>,
+    ) -> Result<Value, FormulaError> {
+        let ctx = Ctx {
+            environment,
+            symbols,
+        };
+        self.try_compute_impl(&ctx)
+    }
+
+    fn try_compute_impl(&self, ctx: &Ctx<'_>) -> Result<Value, FormulaError> {
         match self {
             Self::Value(value) => Ok(value.clone()),
             Self::PlainFunction { fun, args } => {
@@ -82,7 +122,7 @@ impl Formula {
                 }
                 let mut arg_values = args
                     .iter()
-                    .map(Formula::try_compute)
+                    .map(|f| f.try_compute_impl(ctx))
                     .collect::<Result<Vec<_>, _>>()?;
                 use Function::*;
                 match fun {
@@ -93,6 +133,13 @@ impl Formula {
                     Sin => Ok(arg_values.pop().unwrap().map(f64::sin)),
                     Cos => Ok(arg_values.pop().unwrap().map(f64::cos)),
                     Tan => Ok(arg_values.pop().unwrap().map(f64::tan)),
+                }
+            },
+            Self::Symbol(symbol) => {
+                if let Some(value) = ctx.symbols.get(symbol) {
+                    Ok(value.clone())
+                } else {
+                    Err(FormulaError::UndefinedSymbol)
                 }
             }
         }
