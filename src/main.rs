@@ -11,11 +11,11 @@ fn main() {
     println!("{}", environment.format_value_detailed(&length));
     let weight = environment.make_scalar(5.0, kilograms.into(), 4).into();
     println!("{}", environment.format_value_detailed(&weight));
-    let weird_value = length.try_div(&weight).unwrap();
-    println!("{}", environment.format_value_detailed(&weird_value));
 
-    let weight2 = environment.make_scalar(100.0, kilograms.into(), 3).into();
-    println!("{}", environment.format_value_detailed(&weight2));
-    let weight3 = weight.try_add(&weight2).unwrap();
-    println!("{}", environment.format_value_detailed(&weight3));
+    let weird_formula =
+        Function::Mul.into_formula(vec![length.clone().into(), weight.clone().into()]);
+    let weird_formula =
+        Function::Mul.into_formula(vec![length.clone().into(), weird_formula]);
+    println!("{}", environment.format_formula_detailed(&weird_formula));
+    println!("{}", environment.format_value_detailed(&weird_formula.try_compute().unwrap()));
 }

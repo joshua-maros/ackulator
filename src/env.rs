@@ -1,4 +1,3 @@
-use crate::formula::Scalar;
 use crate::prelude::*;
 use crate::unit::{CompositeUnit, CompositeUnitClass, Unit, UnitClass};
 use crate::util::{ItemStorage, StorageHolder};
@@ -64,6 +63,24 @@ impl Environment {
         match value {
             Value::Scalar(scalar) => self.format_scalar_detailed(scalar),
             Value::Vector => unimplemented!(),
+        }
+    }
+
+    pub fn format_formula_detailed(&self, formula: &Formula) -> String {
+        self.format_formula_detailed_impl(formula, 0)
+    }
+    fn format_formula_detailed_impl(&self, formula: &Formula, indent: usize) -> String {
+        match formula {
+            Formula::Value(value) => self.format_value_detailed(value),
+            Formula::PlainFunction { fun, args } => {
+                let mut result = format!("{}[\n", fun.debug_name());
+                for arg in args {
+                    let arg = self.format_formula_detailed_impl(arg, indent + 4);
+                    result += &format!("{0:>1$}{2},\n", "", indent + 4, arg);
+                }
+                result += &format!("{0:>1$}]", "", indent);
+                result
+            }
         }
     }
 
