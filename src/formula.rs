@@ -32,6 +32,38 @@ impl Debug for Symbol {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct SymbolTable<'a> {
+    parent: Option<&'a SymbolTable<'a>>,
+    symbols: &'a HashMap<Symbol, Value>,
+}
+
+impl<'a> SymbolTable<'a> {
+    pub fn new(symbols: &'a HashMap<Symbol, Value>) -> Self {
+        Self {
+            parent: None,
+            symbols,
+        }
+    }
+
+    pub fn child(parent: &'a SymbolTable<'a>, symbols: &'a HashMap<Symbol, Value>) -> Self {
+        Self {
+            parent: Some(parent),
+            symbols,
+        }
+    }
+
+    pub fn get(&self, symbol: &Symbol) -> Option<&Value> {
+        if let Some(value) = self.symbols.get(symbol) {
+            Some(value)
+        } else if let Some(parent) = &self.parent {
+            parent.get(symbol)
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum FormulaError {
     MismatchedUnits,
@@ -97,18 +129,18 @@ pub enum Formula {
 
 struct Ctx<'a> {
     environment: &'a Environment,
-    symbols: &'a HashMap<Symbol, Value>,
+    symbol_table: SymbolTable<'a>,
 }
 
 impl Formula {
     pub fn try_compute(
         &self,
         environment: &Environment,
-        symbols: &HashMap<Symbol, Value>,
+        symbol_table: SymbolTable<'_>,
     ) -> Result<Value, FormulaError> {
         let ctx = Ctx {
             environment,
-            symbols,
+            symbol_table,
         };
         self.try_compute_impl(&ctx)
     }
@@ -136,7 +168,7 @@ impl Formula {
                 }
             },
             Self::Symbol(symbol) => {
-                if let Some(value) = ctx.symbols.get(symbol) {
+                if let Some(value) = ctx.symbol_table.get(symbol) {
                     Ok(value.clone())
                 } else {
                     Err(FormulaError::UndefinedSymbol)

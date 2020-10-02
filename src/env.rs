@@ -1,23 +1,17 @@
 use crate::prelude::*;
 use crate::unit::{CompositeUnit, CompositeUnitClass, Unit, UnitClass};
 use crate::util::{ItemStorage, StorageHolder};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Environment {
     unit_classes: ItemStorage<UnitClass>,
     units: ItemStorage<Unit>,
+    global_symbols: HashMap<Symbol, Value>,
 }
 
+/// Stuff to format values.
 impl Environment {
-    pub fn new() -> Self {
-        let mut result = Self {
-            unit_classes: ItemStorage::new(),
-            units: ItemStorage::new(),
-        };
-        crate::unit::add_default_units(&mut result);
-        result
-    }
-
     pub fn format_base_unit(&self, base_unit: &CompositeUnitClass) -> String {
         let mut numerator = "".to_owned();
         let mut denominator = "".to_owned();
@@ -69,6 +63,7 @@ impl Environment {
     pub fn format_formula_detailed(&self, formula: &Formula) -> String {
         self.format_formula_detailed_impl(formula, 0)
     }
+
     fn format_formula_detailed_impl(&self, formula: &Formula, indent: usize) -> String {
         match formula {
             Formula::Value(value) => self.format_value_detailed(value),
@@ -83,6 +78,20 @@ impl Environment {
             }
             Formula::Symbol(symbol) => format!("{:?}", symbol),
         }
+    }
+}
+
+/// Non-formatting stuff.
+impl Environment {
+    pub fn new() -> Self {
+        let mut result = Self {
+            unit_classes: ItemStorage::new(),
+            units: ItemStorage::new(),
+            global_symbols: HashMap::new(),
+        };
+        crate::unit::add_default_units(&mut result);
+        crate::constants::add_default_symbols(&mut result);
+        result
     }
 
     /// Returns the base unit of the given unit. For example, Meters^2*Seconds^-1 will return
@@ -123,6 +132,18 @@ impl Environment {
         let base_unit = self.base_unit_of(&unit);
         let base_value = value * self.base_conversion_ratio_of(&unit);
         Scalar::new(base_value, base_unit, unit, precision)
+    }
+
+    pub fn add_global_symbol(&mut self, symbol: Symbol, value: Value) {
+        self.global_symbols.insert(symbol, value);
+    }
+
+    pub fn borrow_global_symbols(&self) -> SymbolTable<'_> {
+        SymbolTable::new(&self.global_symbols)
+    }
+
+    pub fn find_global_symbol(&self, symbol: &Symbol) -> Option<&Value> {
+        self.global_symbols.get(symbol)
     }
 }
 

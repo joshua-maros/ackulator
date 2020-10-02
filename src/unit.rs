@@ -1,4 +1,4 @@
-use crate::formula::{Symbol};
+use crate::formula::Symbol;
 use crate::prelude::*;
 use crate::util::{self, ItemId};
 use std::collections::HashMap;
@@ -152,102 +152,178 @@ const METRIC_PREFIXES: [(&'static str, &'static str, f64); 21] = [
     ("Yocto", "y", 1e-24),
 ];
 
-fn add_metric_units(
+fn add_ranged_metric_units(
     env: &mut crate::env::Environment,
     name: &str,
-    symbol: Symbol,
+    symbol: &str,
     prefixless_ratio: f64,
-    base_class: CompositeUnitClass,
+    base_class: &CompositeUnitClass,
+    start_prefix: usize,
+    num_prefixes: usize,
 ) {
-    for (full, prefix, multiplier) in &METRIC_PREFIXES {
-        let mut symbol = symbol.clone();
-        symbol.text = format!("{}{}", prefix, symbol.text);
+    let mut remaining = num_prefixes;
+    for (full, prefix, multiplier) in METRIC_PREFIXES.iter().skip(start_prefix) {
+        let symbol = Symbol::plain(format!("{}{}", prefix, symbol));
         env.store(Unit {
             name: util::to_title_case(&format!("{}{}", full, name)),
             symbol,
             base_ratio: prefixless_ratio * multiplier,
             base_class: base_class.clone(),
         });
+        remaining -= 1;
+        if remaining == 0 {
+            break;
+        }
+    }
+}
+
+fn add_metric_units(
+    env: &mut crate::env::Environment,
+    name: &str,
+    symbol: &str,
+    prefixless_ratio: f64,
+    base_class: &CompositeUnitClass,
+) {
+    add_ranged_metric_units(
+        env,
+        name,
+        symbol,
+        prefixless_ratio,
+        base_class,
+        0,
+        METRIC_PREFIXES.len(),
+    );
+}
+
+/// Do not add sub-unit divisions like milli or micro. Useful for discrete quantities like bytes.
+fn add_upper_metric_units(
+    env: &mut crate::env::Environment,
+    name: &str,
+    symbol: &str,
+    prefixless_ratio: f64,
+    base_class: &CompositeUnitClass,
+) {
+    debug_assert!(METRIC_PREFIXES[METRIC_PREFIXES.len() / 2].2 == 1e0);
+    add_ranged_metric_units(
+        env,
+        name,
+        symbol,
+        prefixless_ratio,
+        base_class,
+        0,
+        METRIC_PREFIXES.len() / 2 + 1,
+    );
+}
+
+/// Do not add upper divisions like kilo, mega. Used for seconds.
+fn add_lower_metric_units(
+    env: &mut crate::env::Environment,
+    name: &str,
+    symbol: &str,
+    prefixless_ratio: f64,
+    base_class: &CompositeUnitClass,
+) {
+    debug_assert!(METRIC_PREFIXES[METRIC_PREFIXES.len() / 2].2 == 1e0);
+    add_ranged_metric_units(
+        env,
+        name,
+        symbol,
+        prefixless_ratio,
+        base_class,
+        METRIC_PREFIXES.len() / 2,
+        METRIC_PREFIXES.len() / 2 + 1,
+    );
+}
+
+fn add_weird_units(
+    env: &mut crate::env::Environment,
+    info: &[(&str, &str, f64)],
+    base_class: &CompositeUnitClass,
+) {
+    for (name, symbol, base_ratio) in info {
+        env.store(Unit {
+            name: name.to_string(),
+            symbol: Symbol::plain(symbol.to_string()),
+            base_ratio: *base_ratio,
+            base_class: base_class.clone(),
+        });
     }
 }
 
 pub fn add_default_units(env: &mut crate::env::Environment) {
+    // =============================================================================================
+    // BASE UNITS
+    // =============================================================================================
+
     let mass: CompositeUnitClass = env.store(UnitClass("Mass".to_owned())).into();
-    add_metric_units(
-        env,
-        "grams",
-        Symbol::plain("g".to_owned()),
-        1e-3, // The base unit is actually kilograms, so there are 1e-3 kilograms per gram.
-        mass.clone(),
-    );
+    // The base unit is actually kilograms, so there are 1e-3 kilograms per gram.
+    add_metric_units(env, "grams", "g", 1e-3, &mass);
 
     let length: CompositeUnitClass = env.store(UnitClass("Length".to_owned())).into();
-    add_metric_units(
-        env,
-        "meters",
-        Symbol::plain("m".to_owned()),
-        1e0,
-        length.clone(),
-    );
+    add_metric_units(env, "meters", "m", 1e0, &length);
     const METERS_PER_FOOT: f64 = 1.0 / 3.28084;
-    env.store(Unit {
-        name: "Feet".to_owned(),
-        symbol: Symbol::plain("ft".to_owned()),
-        base_ratio: METERS_PER_FOOT,
-        base_class: length.clone(),
-    });
-    env.store(Unit {
-        name: "Inches".to_owned(),
-        symbol: Symbol::plain("in".to_owned()),
-        base_ratio: METERS_PER_FOOT / 12.0,
-        base_class: length.clone(),
-    });
-    env.store(Unit {
-        name: "Yards".to_owned(),
-        symbol: Symbol::plain("yd".to_owned()),
-        base_ratio: 3.0 * METERS_PER_FOOT,
-        base_class: length.clone(),
-    });
-    env.store(Unit {
-        name: "Chains".to_owned(),
-        symbol: Symbol::plain("ch".to_owned()),
-        base_ratio: 22.0 * 3.0 * METERS_PER_FOOT,
-        base_class: length.clone(),
-    });
-    env.store(Unit {
-        name: "Furlongs".to_owned(),
-        symbol: Symbol::plain("fr".to_owned()),
-        base_ratio: 220.0 * 3.0 * METERS_PER_FOOT,
-        base_class: length.clone(),
-    });
-    env.store(Unit {
-        name: "Miles".to_owned(),
-        symbol: Symbol::plain("mi".to_owned()),
-        base_ratio: 5280.0 * METERS_PER_FOOT,
-        base_class: length.clone(),
-    });
-    env.store(Unit {
-        name: "Leagues".to_owned(),
-        symbol: Symbol::plain("lea".to_owned()),
-        base_ratio: 15840.0 * METERS_PER_FOOT,
-        base_class: length.clone(),
-    });
-    env.store(Unit {
-        name: "Fathoms".to_owned(),
-        symbol: Symbol::plain("ftm".to_owned()),
-        base_ratio: 1.852,
-        base_class: length.clone(),
-    });
-    env.store(Unit {
-        name: "Cables".to_owned(),
-        symbol: Symbol::plain("cables".to_owned()),
-        base_ratio: 185.2,
-        base_class: length.clone(),
-    });
-    env.store(Unit {
-        name: "Nautical Miles".to_owned(),
-        symbol: Symbol::plain("nautical miles".to_owned()),
-        base_ratio: 1852.0,
-        base_class: length.clone(),
-    });
+    add_weird_units(
+        env,
+        &[
+            ("Feet", "ft", METERS_PER_FOOT),
+            ("Inches", "in", METERS_PER_FOOT / 12.0),
+            ("Yards", "yd", 3.0 * METERS_PER_FOOT),
+            ("Chains", "ch", 22.0 * 3.0 * METERS_PER_FOOT),
+            ("Furlongs", "fr", 220.0 * 3.0 * METERS_PER_FOOT),
+            ("Miles", "mi", 5280.0 * METERS_PER_FOOT),
+            ("Leagues", "lea", 15840.0 * METERS_PER_FOOT),
+            ("Fathoms", "ftm", 1.852),
+            ("Cables", "cables", 185.2),
+            ("Nautical Miles", "nautical miles", 1852.0),
+        ],
+        &length,
+    );
+
+    let time: CompositeUnitClass = env.store(UnitClass("Time".to_owned())).into();
+    add_lower_metric_units(env, "seconds", "s", 1e0, &time);
+    add_weird_units(
+        env,
+        &[
+            ("Minutes", "m", 60.0),
+            ("Hours", "h", 60.0 * 60.0),
+            ("Days", "d", 24.0 * 60.0 * 60.0),
+        ],
+        &time,
+    );
+
+    let current: CompositeUnitClass = env.store(UnitClass("Current".to_owned())).into();
+    // Technically it's "Amperes" but everyone I have ever heard say or write any words uses "Amps"
+    add_metric_units(env, "amps", "A", 1e0, &current);
+
+    // Thermodynamic temperature is a temperature scale where zero is the point where there is no
+    // heat energy in an object. E.G. the Kelvin scale.
+    let thermodynamic_temperature: CompositeUnitClass = env
+        .store(UnitClass("Thermodynamic Temperature".to_owned()))
+        .into();
+    add_weird_units(
+        env,
+        &[("Degrees Kelvin", "K", 1.0)],
+        &thermodynamic_temperature,
+    );
+
+    // =============================================================================================
+    // COMPOSITE UNITS
+    // =============================================================================================
+
+    let speed = length.clone() / time.clone();
+    let acceleration = speed.clone() / time.clone();
+    let force = mass.clone() * acceleration.clone();
+    add_metric_units(env, "newtons", "N", 1.0, &force);
+    add_weird_units(env, &[("Pound-Force", "lbs", 4.44822)], &force);
+    let energy = force.clone() * length.clone();
+    add_metric_units(env, "joules", "J", 1.0, &energy);
+
+    let electric_charge = current.clone() * time.clone();
+    add_metric_units(env, "coulumbs", "C", 1.0, &electric_charge);
+
+    let electric_potential = energy.clone() / electric_charge.clone();
+    add_metric_units(env, "volts", "V", 1.0, &electric_potential);
+
+    let capacitance = electric_charge.clone() / electric_potential.clone();
+    add_metric_units(env, "farads", "F", 1.0, &capacitance);
 }

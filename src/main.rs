@@ -12,6 +12,10 @@ fn main() {
     println!("{}", environment.format_value_detailed(&length));
     let weight = environment.make_scalar(5.0, kilograms.into(), 4).into();
     println!("{}", environment.format_value_detailed(&weight));
+    let vacuum_permittivity = environment
+        .find_global_symbol(&Symbol::plain("Vacuum Permittivity".to_owned()))
+        .unwrap();
+    println!("{}", environment.format_value_detailed(&vacuum_permittivity));
 
     let constant_symbol = Symbol::plain("H".to_owned());
     let weird_formula =
@@ -20,10 +24,10 @@ fn main() {
         Function::Mul.into_formula(vec![constant_symbol.clone().into(), weird_formula]);
     println!("{}", environment.format_formula_detailed(&weird_formula));
 
-    let mut symbol_table = HashMap::new();
-    symbol_table.insert(constant_symbol, weight);
-    let formula_value = weird_formula
-        .try_compute(&environment, &symbol_table)
-        .unwrap();
+    let mut symbols = HashMap::new();
+    symbols.insert(constant_symbol, vacuum_permittivity.clone());
+    let parent = environment.borrow_global_symbols();
+    let table = SymbolTable::child(&parent, &symbols);
+    let formula_value = weird_formula.try_compute(&environment, table).unwrap();
     println!("{}", environment.format_value_detailed(&formula_value));
 }
