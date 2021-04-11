@@ -6,7 +6,7 @@ make base_unit called Meter, Meters {
 }
 make derived_unit called Foot, Feet {
     _symbol: "ft",
-    value: 0.3048 * Meters,
+    _value: 0.3048 * Meters,
 }
 
 make label Pi, \pi for 3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679
