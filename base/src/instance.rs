@@ -1,11 +1,62 @@
 use crate::prelude::*;
-use std::{collections::HashMap, hash::Hash};
+use std::{
+    collections::HashMap,
+    hash::Hash,
+    ops::{Index, IndexMut},
+};
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub struct UnitClassId(usize);
+#[derive(Debug, Hash)]
+pub struct StorageId<T>(usize, std::marker::PhantomData<T>);
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub struct UnitId(usize);
+impl<T> Clone for StorageId<T> {
+    fn clone(&self) -> Self {
+        Self(self.0, self.1)
+    }
+}
+
+impl<T> Copy for StorageId<T> {}
+
+impl<T> PartialEq for StorageId<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<T> Eq for StorageId<T> {}
+
+#[derive(Clone, Debug)]
+struct StoragePool<T>(Vec<T>);
+impl<T> StoragePool<T> {
+    fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    fn next_id(&self) -> StorageId<T> {
+        StorageId(self.0.len(), std::marker::PhantomData)
+    }
+
+    fn push(&mut self, item: T) -> StorageId<T> {
+        let id = self.next_id();
+        self.0.push(item);
+        id
+    }
+}
+
+impl<T> Index<StorageId<T>> for StoragePool<T> {
+    type Output = T;
+    fn index(&self, index: StorageId<T>) -> &T {
+        &self.0[index.0]
+    }
+}
+
+impl<T> IndexMut<StorageId<T>> for StoragePool<T> {
+    fn index_mut(&mut self, index: StorageId<T>) -> &mut T {
+        &mut self.0[index.0]
+    }
+}
+
+pub type UnitClassId = StorageId<UnitClass>;
+pub type UnitId = StorageId<Unit>;
 
 #[derive(Clone, Debug)]
 struct ManyToOneMap<K: Hash + Eq, V> {
@@ -50,10 +101,10 @@ impl<K: Hash + Eq, V> ManyToOneMap<K, V> {
 #[scones::make_constructor]
 #[derive(Debug)]
 pub struct Instance {
-    #[value(Vec::new())]
-    unit_classes: Vec<UnitClass>,
-    #[value(Vec::new())]
-    units: Vec<Unit>,
+    #[value(StoragePool::new())]
+    unit_classes: StoragePool<UnitClass>,
+    #[value(StoragePool::new())]
+    units: StoragePool<Unit>,
     #[value(ManyToOneMap::new())]
     meta_items: ManyToOneMap<String, MetaData>,
     #[value(ManyToOneMap::new())]
@@ -64,9 +115,9 @@ pub struct Instance {
 
 impl Instance {
     pub fn add_unit_class(&mut self, unit_class: UnitClass) -> Result<UnitClassId, ()> {
-        let id = UnitClassId(self.unit_classes.len());
+        let id = self.unit_classes.next_id();
         self.declare_meta_item(unit_class.names.clone(), id.into())?;
-        self.unit_classes.push(unit_class);
+        debug_assert_eq!(self.unit_classes.push(unit_class), id);
         Ok(id)
     }
 
@@ -116,15 +167,21 @@ impl Instance {
                 return Err(());
             }
         }
-        let id = UnitId(self.unit_classes.len());
+        let id = self.units.next_id();
         self.declare_meta_item(unit.names.clone(), id.into())?;
-        self.units.push(unit);
+        debug_assert_eq!(self.units.push(unit), id);
+        for variant in variants {
+            // We already checked everything here so no need to use maybe_push.
+            let names = variant.names.clone();
+            let id = self.units.push(variant);
+            self.declare_meta_item(names, id.into())?;
+        }
         Ok(id)
     }
 
     /// Returns Err(()) if one of the provided names is already declared. If this happens, none
     /// of the names passed will be defined.
-    pub fn declare_meta_item(&mut self, names: Vec<String>, data: MetaData) -> Result<(), ()> {
+    fn declare_meta_item(&mut self, names: Vec<String>, data: MetaData) -> Result<(), ()> {
         if self.meta_items.contains_any_key(&names) {
             return Err(());
         }
@@ -134,7 +191,7 @@ impl Instance {
 
     /// Returns Err(()) if one of the provided names is already declared. If this happens, none
     /// of the names passed will be defined.
-    pub fn declare_value(&mut self, names: Vec<String>, data: ValueData) -> Result<(), ()> {
+    fn declare_value(&mut self, names: Vec<String>, data: ValueData) -> Result<(), ()> {
         if self.values.contains_any_key(&names) {
             return Err(());
         }
@@ -144,7 +201,7 @@ impl Instance {
 
     /// Returns Err(()) if one of the provided names is already declared. If this happens, none
     /// of the names passed will be defined.
-    pub fn declare_label(&mut self, names: Vec<String>, data: Data) -> Result<(), ()> {
+    fn declare_label(&mut self, names: Vec<String>, data: Data) -> Result<(), ()> {
         if self.labels.contains_any_key(&names) {
             return Err(());
         }
