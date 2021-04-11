@@ -1,11 +1,12 @@
 use crate::prelude::*;
 use std::{
     collections::HashMap,
+    fmt::{Debug, Formatter},
     hash::Hash,
     ops::{Index, IndexMut},
 };
 
-#[derive(Debug, Hash)]
+#[derive(Hash)]
 pub struct StorageId<T>(usize, std::marker::PhantomData<T>);
 
 impl<T> Clone for StorageId<T> {
@@ -24,7 +25,21 @@ impl<T> PartialEq for StorageId<T> {
 
 impl<T> Eq for StorageId<T> {}
 
-#[derive(Clone, Debug)]
+impl<T> Debug for StorageId<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} instance {}",
+            std::any::type_name::<T>()
+                .split(':')
+                .last()
+                .unwrap_or_default(),
+            self.0
+        )
+    }
+}
+
+#[derive(Clone)]
 struct StoragePool<T>(Vec<T>);
 impl<T> StoragePool<T> {
     fn new() -> Self {
@@ -39,6 +54,23 @@ impl<T> StoragePool<T> {
         let id = self.next_id();
         self.0.push(item);
         id
+    }
+}
+
+impl<T> Debug for StoragePool<T>
+where
+    T: Debug,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "StoragePool<{}>",
+            std::any::type_name::<T>()
+                .split(':')
+                .last()
+                .unwrap_or_default()
+        )?;
+        f.debug_list().entries(&self.0).finish()
     }
 }
 
@@ -218,11 +250,20 @@ impl Instance {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum MetaData {
     CompositeUnitClass(CompositeUnitClass),
     CompositeUnit(CompositeUnit),
     // EntityClass(EntityClassId),
+}
+
+impl Debug for MetaData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::CompositeUnitClass(v) => write!(f, "{:?}", v),
+            Self::CompositeUnit(v) => write!(f, "{:?}", v),
+        }
+    }
 }
 
 macro_rules! from_into {
@@ -245,18 +286,35 @@ from_into!(UnitClassId MetaData CompositeUnitClass);
 from_into!(CompositeUnit MetaData CompositeUnit);
 from_into!(UnitId MetaData CompositeUnit);
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum ValueData {
     Scalar(Scalar),
     // Entity(Entity),
 }
 
+impl Debug for ValueData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Scalar(v) => write!(f, "{:?}", v),
+        }
+    }
+}
+
 from_into!(Scalar ValueData Scalar);
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Data {
     Meta(MetaData),
     Value(ValueData),
+}
+
+impl Debug for Data {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Meta(v) => write!(f, "{:?}", v),
+            Self::Value(v) => write!(f, "{:?}", v),
+        }
+    }
 }
 
 impl From<MetaData> for Data {

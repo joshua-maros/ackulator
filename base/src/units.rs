@@ -1,5 +1,8 @@
 use crate::prelude::*;
-use std::ops::{Div, Mul};
+use std::{
+    fmt::{Debug, Formatter},
+    ops::{Div, Mul},
+};
 
 #[derive(Clone, Debug)]
 pub struct UnitClass {
@@ -51,8 +54,8 @@ pub struct Unit {
     pub base_ratio: f64,
 }
 
-#[derive(Clone, Debug)]
-pub struct Composite<I: Eq + Copy> {
+#[derive(Clone)]
+pub struct Composite<I: Eq + Copy + Debug> {
     pub numerator_factors: Vec<I>,
     pub denominator_factors: Vec<I>,
 }
@@ -60,7 +63,7 @@ pub struct Composite<I: Eq + Copy> {
 pub type CompositeUnitClass = Composite<UnitClassId>;
 pub type CompositeUnit = Composite<UnitId>;
 
-impl<I: Eq + Copy> Composite<I> {
+impl<I: Eq + Copy + Debug> Composite<I> {
     pub fn is_identity(&self) -> bool {
         self.numerator_factors.len() == 0 && self.denominator_factors.len() == 0
     }
@@ -77,8 +80,33 @@ impl<I: Eq + Copy> Composite<I> {
         }
     }
 }
+impl<I: Eq + Copy + Debug> Debug for Composite<I> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.numerator_factors.len() == 0 {
+            write!(f, "1")?;
+        } else if self.numerator_factors.len() == 1 {
+            write!(f, "{:?}", self.numerator_factors[0])?;
+        } else {
+            write!(f, "({:?}", self.numerator_factors[0])?;
+            for factor in &self.numerator_factors[1..] {
+                write!(f, " * {:?} ", factor)?;
+            }
+            write!(f, ")")?;
+        }
+        if self.denominator_factors.len() == 1 {
+            write!(f, "/ {:?}", self.denominator_factors[0])?;
+        } else if self.denominator_factors.len() > 1 {
+            write!(f, "/ ({:?}", self.denominator_factors[0])?;
+            for factor in &self.denominator_factors[1..] {
+                write!(f, " * {:?} ", factor)?;
+            }
+            write!(f, ")")?;
+        }
+        Ok(())
+    }
+}
 
-impl<I: Eq + Copy> From<I> for Composite<I> {
+impl<I: Eq + Copy + Debug> From<I> for Composite<I> {
     fn from(item: I) -> Self {
         Self {
             numerator_factors: vec![item],
@@ -87,7 +115,7 @@ impl<I: Eq + Copy> From<I> for Composite<I> {
     }
 }
 
-impl<I: Eq + Copy> Mul for Composite<I> {
+impl<I: Eq + Copy + Debug> Mul for Composite<I> {
     type Output = Self;
     fn mul(mut self, mut rhs: Self) -> Self::Output {
         self.numerator_factors.append(&mut rhs.numerator_factors);
@@ -98,7 +126,7 @@ impl<I: Eq + Copy> Mul for Composite<I> {
     }
 }
 
-impl<I: Eq + Copy> Div for Composite<I> {
+impl<I: Eq + Copy + Debug> Div for Composite<I> {
     type Output = Self;
     fn div(mut self, mut rhs: Self) -> Self::Output {
         self.numerator_factors.append(&mut rhs.denominator_factors);
@@ -108,10 +136,10 @@ impl<I: Eq + Copy> Div for Composite<I> {
     }
 }
 
-impl<I: Eq + Copy> PartialEq for Composite<I> {
+impl<I: Eq + Copy + Debug> PartialEq for Composite<I> {
     fn eq(&self, other: &Self) -> bool {
         (self.clone() / other.clone()).is_identity()
     }
 }
 
-impl<I: Eq + Copy> Eq for Composite<I> {}
+impl<I: Eq + Copy + Debug> Eq for Composite<I> {}
