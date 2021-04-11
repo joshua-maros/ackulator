@@ -1,4 +1,4 @@
-use crate::prelude::{Data, EntityClassId};
+use crate::{data::Data, prelude::{EntityClassId}};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
