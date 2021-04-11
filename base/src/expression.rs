@@ -24,6 +24,10 @@ pub enum Expression {
         function: Box<Expression>,
         arguments: Vec<Expression>,
     },
+    BuildEntity {
+        properties: Vec<(String, Expression)>,
+        class_names: Vec<String>,
+    },
 }
 
 mod parsing {
@@ -36,7 +40,7 @@ mod parsing {
         character::complete::{char, one_of},
         combinator::{not, opt},
         error::make_error,
-        multi::{fold_many0, many0, many1},
+        multi::{fold_many0, many0, many1, separated_list0},
         sequence::{delimited, pair, tuple},
     };
 
@@ -106,10 +110,47 @@ mod parsing {
         }
     }
 
-    fn lookup_name(input: &str) -> IResult<&str, Expression> {
+    fn identifier(input: &str) -> IResult<&str, String> {
         let (input, _) = not(collect_digits)(input)?;
-        let (input, name) = take_while1(char::is_alphanumeric)(input)?;
-        Ok((input, Expression::LookupName(name.to_owned())))
+        let (input, value) = take_while1(char::is_alphanumeric)(input)?;
+        Ok((input, value.to_owned()))
+    }
+
+    fn lookup_name(input: &str) -> IResult<&str, Expression> {
+        let (input, name) = identifier(input)?;
+        Ok((input, Expression::LookupName(name)))
+    }
+
+    fn entity_builder_field(input: &str) -> IResult<&str, (String, Option<Expression>)> {
+        let (input, _) = whitespace(input)?;
+        let (input, name) = identifier(input)?;
+        let (input, value) =
+            opt(tuple((whitespace, char(':'), whitespace, expr_priority10)))(input)?;
+        let (input, _) = whitespace(input)?;
+        Ok((input, (name, value.map(|v| v.3))))
+    }
+
+    fn entity_builder(input: &str) -> IResult<&str, Expression> {
+        let (input, fields) = separated_list0(
+            delimited(whitespace, char(','), whitespace),
+            entity_builder_field,
+        )(input)?;
+        let mut properties = Vec::new();
+        let mut class_names = Vec::new();
+        for (name, value) in fields {
+            if let Some(value) = value {
+                properties.push((name, value));
+            } else {
+                class_names.push(name);
+            }
+        }
+        Ok((
+            input,
+            Expression::BuildEntity {
+                properties,
+                class_names,
+            },
+        ))
     }
 
     /// This should always be called with delimited(whitespace, this, whitespace) because it is a
@@ -119,6 +160,7 @@ mod parsing {
             numeric_literal,
             lookup_name,
             delimited(char('('), expr_priority10, char(')')),
+            delimited(char('{'), entity_builder, char('}')),
         ))(input)
     }
 

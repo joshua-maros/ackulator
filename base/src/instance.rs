@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::{entity::{Entity, EntityClass}, prelude::*};
 use std::{
     collections::HashMap,
     fmt::{Debug, Formatter},
@@ -89,6 +89,7 @@ impl<T> IndexMut<StorageId<T>> for StoragePool<T> {
 
 pub type UnitClassId = StorageId<UnitClass>;
 pub type UnitId = StorageId<Unit>;
+pub type EntityClassId = StorageId<EntityClass>;
 
 #[derive(Clone, Debug)]
 struct ManyToOneMap<K: Hash + Eq, V> {
@@ -137,6 +138,9 @@ pub struct Instance {
     unit_classes: StoragePool<UnitClass>,
     #[value(StoragePool::new())]
     units: StoragePool<Unit>,
+    #[value(StoragePool::new())]
+    entity_classes: StoragePool<EntityClass>,
+
     #[value(ManyToOneMap::new())]
     meta_items: ManyToOneMap<String, MetaData>,
     #[value(ManyToOneMap::new())]
@@ -211,6 +215,13 @@ impl Instance {
         Ok(id)
     }
 
+    pub fn add_entity_class(&mut self, entity_class: EntityClass) -> Result<EntityClassId, ()> {
+        let id = self.entity_classes.next_id();
+        self.declare_meta_item(entity_class.names.clone(), id.into())?;
+        debug_assert_eq!(self.entity_classes.push(entity_class), id);
+        Ok(id)
+    }
+
     /// Returns Err(()) if one of the provided names is already declared. If this happens, none
     /// of the names passed will be defined.
     fn declare_meta_item(&mut self, names: Vec<String>, data: MetaData) -> Result<(), ()> {
@@ -254,7 +265,7 @@ impl Instance {
 pub enum MetaData {
     CompositeUnitClass(CompositeUnitClass),
     CompositeUnit(CompositeUnit),
-    // EntityClass(EntityClassId),
+    EntityClass(EntityClassId),
 }
 
 impl Debug for MetaData {
@@ -262,6 +273,7 @@ impl Debug for MetaData {
         match self {
             Self::CompositeUnitClass(v) => write!(f, "{:?}", v),
             Self::CompositeUnit(v) => write!(f, "{:?}", v),
+            Self::EntityClass(v) => write!(f, "{:?}", v),
         }
     }
 }
@@ -285,22 +297,25 @@ from_into!(CompositeUnitClass MetaData CompositeUnitClass);
 from_into!(UnitClassId MetaData CompositeUnitClass);
 from_into!(CompositeUnit MetaData CompositeUnit);
 from_into!(UnitId MetaData CompositeUnit);
+from_into!(EntityClassId MetaData EntityClass);
 
 #[derive(Clone)]
 pub enum ValueData {
     Scalar(Scalar),
-    // Entity(Entity),
+    Entity(Entity),
 }
 
 impl Debug for ValueData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Scalar(v) => write!(f, "{:?}", v),
+            Self::Entity(v) => write!(f, "{:?}", v),
         }
     }
 }
 
 from_into!(Scalar ValueData Scalar);
+from_into!(Entity ValueData Entity);
 
 #[derive(Clone)]
 pub enum Data {
