@@ -15,5 +15,12 @@ fn main() {
     instance.add_unit(unit, UnitPrefixType::Metric).unwrap();
     println!("{:#?}", instance);
 
-    println!("{:#?}", ackulator::expression::parse_expression("{ heeey: hooo   ,     weyo, we     , mydensityis: 123 + 456    , asdf }"));
+    let (_, expr) = ackulator::expression::parse_expression(
+        "3e-30 * Yottameters",
+    )
+    .unwrap();
+    println!(
+        "{:#?}",
+        instance.resolve_expression(&expr, Default::default())
+    );
 }

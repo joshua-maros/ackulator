@@ -1,15 +1,15 @@
 make unit_class called Length
 make base_unit called Meter, Meters {
-    _class: Length,
-    _symbol: "m",
-    _metric,
+    class: Length,
+    symbol: "m",
+    metric,
 }
 make derived_unit called Foot, Feet {
-    _symbol: "ft",
-    _value: 0.3048 * Meters,
+    symbol: "ft",
+    value: 0.3048 * Meters,
 }
 
-make label Pi, \pi for 3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679
+make label called Pi, \pi for 3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679
 
 make entity_class called Round
 make entity_class called Circle
@@ -53,44 +53,44 @@ check MyPizza.Area = \pi * 0.01 * Meters^2
 
 make unit_class called Mass
 make base_unit called Gram, Grams {
-    _class: Mass,
-    _symbol: "g",
-    _metric,
+    class: Mass,
+    symbol: "g",
+    metric,
 }
 check 1 * Kilogram = 1000 * Grams
 
 make unit_class called Time
 make base_unit called Second, Seconds {
-    _class: Time,
-    _symbol: "s",
-    _partial_metric,
+    class: Time,
+    symbol: "s",
+    partial_metric,
 }
 make derived_unit called Minute, Minutes {
-    _symbol: "m",
-    _value: 60 * Seconds,
+    symbol: "m",
+    value: 60 * Seconds,
 }
 make derived_unit called Hour, Hours {
-    _symbol: "h",
-    _value: 60 * Minutes,
+    symbol: "h",
+    value: 60 * Minutes,
 }
 make derived_unit called Day, Days {
-    _symbol: "d",
-    _value: 24 * Hours,
+    symbol: "d",
+    value: 24 * Hours,
 }
 make derived_unit called Year, Years {
-    _symbol: "y",
-    _value: 365.24219 * Days,
+    symbol: "y",
+    value: 365.24219 * Days,
 }
 
-make label Velocity for Length / Time
-make label Acceleration for Velocity / Time
-make label Force for Acceleration / Mass
+make label called Velocity for Length / Time
+make label called Acceleration for Velocity / Time
+make label called Force for Acceleration / Mass
 
 make derived_unit called Newton, Newtons {
-    _symbol: "N",
-    _value: 1 * Meters / Second ^ 2 / Kilogram,
-    _metric,
+    symbol: "N",
+    value: 1 * Meters / Second ^ 2 / Kilogram,
+    metric,
 }
 
-make label Impulse for Force * Time
+make label called Impulse for Force * Time
 check Impulse = Velocity / Mass

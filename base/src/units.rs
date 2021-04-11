@@ -1,7 +1,7 @@
 use crate::prelude::*;
 use std::{
     fmt::{Debug, Formatter},
-    ops::{Div, Mul},
+    ops::{Div, DivAssign, Mul, MulAssign},
 };
 
 #[derive(Clone, Debug)]
@@ -64,6 +64,13 @@ pub type CompositeUnitClass = Composite<UnitClassId>;
 pub type CompositeUnit = Composite<UnitId>;
 
 impl<I: Eq + Copy + Debug> Composite<I> {
+    pub fn identity() -> Self {
+        Self {
+            numerator_factors: Vec::new(),
+            denominator_factors: Vec::new(),
+        }
+    }
+
     pub fn is_identity(&self) -> bool {
         self.numerator_factors.len() == 0 && self.denominator_factors.len() == 0
     }
@@ -79,7 +86,45 @@ impl<I: Eq + Copy + Debug> Composite<I> {
             }
         }
     }
+
+    pub fn pow(&mut self, exp: f64) {
+        unimplemented!()
+    }
 }
+
+impl CompositeUnit {
+    pub fn base_ratio(&self, instance: &Instance) -> f64 {
+        let mut ratio = 1.0;
+        for factor_id in &self.numerator_factors {
+            ratio *= instance[*factor_id].base_ratio;
+        }
+        for factor_id in &self.denominator_factors {
+            ratio /= instance[*factor_id].base_ratio;
+        }
+        ratio
+    }
+
+    pub fn unit_class(&self, instance: &Instance) -> CompositeUnitClass {
+        let mut class = CompositeUnitClass::identity();
+        for fac in self.numerator_factors.iter() {
+            class *= instance[*fac].class.clone();
+        }
+        for fac in self.denominator_factors.iter() {
+            class /= instance[*fac].class.clone();
+        }
+        class
+    }
+
+    pub fn as_scalar(&self, instance: &Instance) -> Scalar {
+        Scalar::new(
+            self.base_ratio(instance),
+            Precision::Exact,
+            self.unit_class(instance),
+            self.clone(),
+        )
+    }
+}
+
 impl<I: Eq + Copy + Debug> Debug for Composite<I> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.numerator_factors.len() == 0 {
@@ -126,6 +171,12 @@ impl<I: Eq + Copy + Debug> Mul for Composite<I> {
     }
 }
 
+impl<I: Eq + Copy + Debug> MulAssign for Composite<I> {
+    fn mul_assign(&mut self, rhs: Self) {
+        *self = self.clone() * rhs;
+    }
+}
+
 impl<I: Eq + Copy + Debug> Div for Composite<I> {
     type Output = Self;
     fn div(mut self, mut rhs: Self) -> Self::Output {
@@ -133,6 +184,12 @@ impl<I: Eq + Copy + Debug> Div for Composite<I> {
         self.denominator_factors.append(&mut rhs.numerator_factors);
         self.simplify();
         self
+    }
+}
+
+impl<I: Eq + Copy + Debug> DivAssign for Composite<I> {
+    fn div_assign(&mut self, rhs: Self) {
+        *self = self.clone() * rhs;
     }
 }
 

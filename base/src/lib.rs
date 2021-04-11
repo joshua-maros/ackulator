@@ -3,6 +3,7 @@ pub mod entity;
 pub mod expression;
 pub mod instance;
 pub mod scalar;
+mod statement;
 mod storage;
 pub mod units;
 

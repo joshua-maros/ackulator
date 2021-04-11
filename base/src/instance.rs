@@ -1,10 +1,12 @@
 use crate::{
     data::{AmbiguousItem, Data, MetaData, ValueData},
-    entity::EntityClass,
+    entity::{Entity, EntityClass},
+    expression::{BinaryOp, Expression, UnaryOp},
     prelude::*,
     storage::{StorageId, StoragePool},
 };
-use std::{collections::HashMap, fmt::Debug, hash::Hash};
+use paste::paste;
+use std::{collections::HashMap, fmt::Debug, hash::Hash, ops::Index};
 
 pub type UnitClassId = StorageId<UnitClass>;
 pub type UnitId = StorageId<Unit>;
@@ -50,25 +52,47 @@ impl<K: Hash + Eq, V> ManyToOneMap<K, V> {
     }
 }
 
-#[scones::make_constructor]
 #[derive(Debug)]
 pub struct Instance {
-    #[value(StoragePool::new())]
     unit_classes: StoragePool<UnitClass>,
-    #[value(StoragePool::new())]
     units: StoragePool<Unit>,
-    #[value(StoragePool::new())]
     entity_classes: StoragePool<EntityClass>,
 
-    #[value(ManyToOneMap::new())]
     meta_items: ManyToOneMap<String, MetaData>,
-    #[value(ManyToOneMap::new())]
     values: ManyToOneMap<String, ValueData>,
-    #[value(ManyToOneMap::new())]
     labels: ManyToOneMap<String, Data>,
 }
 
+macro_rules! index_storage {
+    ($field_name:ident $ResultType:ident) => {
+        paste! {
+            impl Index<[<$ResultType Id>]> for Instance {
+                type Output = $ResultType;
+                fn index(&self, idx: [<$ResultType Id>]) -> &$ResultType {
+                    &self.$field_name[idx]
+                }
+            }
+        }
+    };
+}
+
+index_storage!(unit_classes UnitClass);
+index_storage!(units Unit);
+index_storage!(entity_classes EntityClass);
+
 impl Instance {
+    pub fn new() -> Self {
+        Self {
+            unit_classes: StoragePool::new(),
+            units: StoragePool::new(),
+            entity_classes: StoragePool::new(),
+
+            meta_items: ManyToOneMap::new(),
+            values: ManyToOneMap::new(),
+            labels: ManyToOneMap::new(),
+        }
+    }
+
     pub fn add_unit_class(&mut self, unit_class: UnitClass) -> Result<UnitClassId, ()> {
         let id = self.unit_classes.next_id();
         self.declare_meta_item(unit_class.names.clone(), id.into())?;
@@ -177,5 +201,167 @@ impl Instance {
             as_value: self.values.get(name),
             as_label: self.labels.get_key_value(name),
         }
+    }
+}
+
+/// Tells the instance how it should deal with multiple items that have the same name. E.G. should
+/// it prefer meta items or values.
+#[derive(Clone, Copy)]
+pub enum AmbiguityResolutionContext {
+    PreferMetaItems,
+    PreferValues,
+}
+
+impl Default for AmbiguityResolutionContext {
+    fn default() -> Self {
+        Self::PreferValues
+    }
+}
+
+impl AmbiguityResolutionContext {
+    pub fn resolve(self, item: &AmbiguousItem) -> Option<Data> {
+        match self {
+            Self::PreferMetaItems => {
+                if let Some(data) = item.as_meta {
+                    return Some(data.clone().into());
+                }
+            }
+            Self::PreferValues => {
+                if let Some(data) = item.as_value {
+                    return Some(data.clone().into());
+                }
+            }
+        }
+        if let Some(data) = item.as_value {
+            Some(data.clone().into())
+        } else if let Some(data) = item.as_meta {
+            Some(data.clone().into())
+        } else if let Some((_name, data)) = item.as_label {
+            Some(data.clone())
+        } else {
+            None
+        }
+    }
+}
+
+impl Instance {
+    fn resolve_unary_expression(&self, op: UnaryOp, rhs: Data) -> Result<Data, ()> {
+        use Data::*;
+        use MetaData::*;
+        use UnaryOp::*;
+        use ValueData::*;
+        match op {
+            Negate => match rhs {
+                Value(Scalar(data)) => Ok((-data).into()),
+                _ => Err(()),
+            },
+        }
+    }
+
+    fn resolve_binary_expression(&self, lhs: Data, op: BinaryOp, rhs: Data) -> Result<Data, ()> {
+        use BinaryOp::*;
+        use Data::*;
+        use MetaData::*;
+        use ValueData::*;
+        match (lhs, rhs) {
+            (Meta(EntityClass(..)), _) => Err(()),
+            (_, Meta(EntityClass(..))) => Err(()),
+            (Value(Entity(..)), _) => Err(()),
+            (_, Value(Entity(..))) => Err(()),
+            (Meta(Unit(..)), Meta(UnitClass(..))) => Err(()),
+            (Meta(UnitClass(..)), Meta(Unit(..))) => Err(()),
+
+            (Meta(Unit(lhs)), Meta(Unit(rhs))) => match op {
+                Add | Sub | Pow => Err(()),
+                Mul => Ok((lhs * rhs).into()),
+                Div => Ok((lhs / rhs).into()),
+            },
+            (Meta(UnitClass(lhs)), Meta(UnitClass(rhs))) => match op {
+                Add | Sub | Pow => Err(()),
+                Mul => Ok((lhs * rhs).into()),
+                Div => Ok((lhs / rhs).into()),
+            },
+
+            (Value(Scalar(lhs)), Meta(Unit(rhs))) => match op {
+                Add | Sub | Pow => Err(()),
+                Mul => Ok((lhs * rhs.as_scalar(self)).into()),
+                Div => Ok((lhs / rhs.as_scalar(self)).into()),
+            },
+            (Meta(Unit(lhs)), Value(Scalar(rhs))) => match op {
+                Add | Sub | Pow => Err(()),
+                Mul => Ok((lhs.as_scalar(self) * rhs).into()),
+                Div => Ok((lhs.as_scalar(self) / rhs).into()),
+            },
+            (Value(Scalar(..)), Meta(UnitClass(..))) | (Meta(UnitClass(..)), Value(Scalar(..))) => {
+                Err(())
+            }
+
+            (Value(Scalar(lhs)), Value(Scalar(rhs))) => match op {
+                Add => lhs.add(&rhs).map(Into::into),
+                Sub => lhs.sub(&rhs).map(Into::into),
+                Mul => Ok((lhs * rhs).into()),
+                Div => Ok((lhs / rhs).into()),
+                Pow => lhs.pow(&rhs, self).map(Into::into),
+            },
+        }
+    }
+
+    pub fn resolve_expression(
+        &self,
+        expression: &Expression,
+        context: AmbiguityResolutionContext,
+    ) -> Result<Data, ()> {
+        Ok(match &expression {
+            Expression::ApplyFunction { .. } => unimplemented!(),
+            Expression::UnaryExpr(op, rhs) => {
+                let rhs = self.resolve_expression(rhs, context)?;
+                self.resolve_unary_expression(*op, rhs)?
+            }
+            Expression::BinaryExpr(lhs, op, rhs) => {
+                let lhs = self.resolve_expression(lhs, context)?;
+                let rhs = self.resolve_expression(rhs, context)?;
+                self.resolve_binary_expression(lhs, *op, rhs)?
+            }
+            Expression::BuildEntity {
+                properties,
+                class_names,
+            } => {
+                let mut classes = Vec::new();
+                for name in class_names {
+                    if let Some(MetaData::EntityClass(class_id)) = self.meta_items.get(name) {
+                        classes.push(*class_id);
+                    } else {
+                        return Err(());
+                    }
+                }
+                let properties = properties
+                    .iter()
+                    .map(|(name, value)| {
+                        self.resolve_expression(value, context)
+                            .map(|data| (name.clone(), data))
+                    })
+                    .collect::<Result<_, _>>()?;
+                Entity {
+                    properties,
+                    classes,
+                }
+                .into()
+            }
+            Expression::LookupName(name) => {
+                let item = self.lookup_item(name);
+                if let Some(data) = context.resolve(&item) {
+                    data
+                } else {
+                    return Err(());
+                }
+            }
+            Expression::NumericLiteral(value) => Scalar::new(
+                *value,
+                Precision::Exact,
+                CompositeUnitClass::identity(),
+                CompositeUnit::identity(),
+            )
+            .into(),
+        })
     }
 }

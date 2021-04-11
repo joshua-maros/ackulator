@@ -4,16 +4,16 @@ use crate::{entity::Entity, prelude::*};
 
 #[derive(Clone)]
 pub enum MetaData {
-    CompositeUnitClass(CompositeUnitClass),
-    CompositeUnit(CompositeUnit),
+    UnitClass(CompositeUnitClass),
+    Unit(CompositeUnit),
     EntityClass(EntityClassId),
 }
 
 impl Debug for MetaData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::CompositeUnitClass(v) => write!(f, "{:?}", v),
-            Self::CompositeUnit(v) => write!(f, "{:?}", v),
+            Self::UnitClass(v) => write!(f, "{:?}", v),
+            Self::Unit(v) => write!(f, "{:?}", v),
             Self::EntityClass(v) => write!(f, "{:?}", v),
         }
     }
@@ -34,10 +34,10 @@ macro_rules! from_into {
     };
 }
 
-from_into!(CompositeUnitClass MetaData CompositeUnitClass);
-from_into!(UnitClassId MetaData CompositeUnitClass);
-from_into!(CompositeUnit MetaData CompositeUnit);
-from_into!(UnitId MetaData CompositeUnit);
+from_into!(CompositeUnitClass MetaData UnitClass);
+from_into!(UnitClassId MetaData UnitClass);
+from_into!(CompositeUnit MetaData Unit);
+from_into!(UnitId MetaData Unit);
 from_into!(EntityClassId MetaData EntityClass);
 
 #[derive(Clone)]

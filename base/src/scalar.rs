@@ -4,10 +4,11 @@ use std::{
     ops::{Div, Mul, Neg},
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Precision {
     SigFigs(i32),
     PercentError(f64),
+    Exact,
 }
 
 impl Precision {
@@ -19,6 +20,7 @@ impl Precision {
                 range / for_value
             }
             Self::PercentError(p) => p,
+            Self::Exact => 0.0,
         }
     }
 }
@@ -43,6 +45,9 @@ impl Scalar {
         let rhs_order = other.value.log10() as i32;
         let new_order = new_value.log10() as i32;
         let new_precision = match ((self.value, self.precision), (other.value, other.precision)) {
+            ((_, Exact), (_, Exact)) => Exact,
+            ((_, Exact), (_, other)) => other,
+            ((_, other), (_, Exact)) => other,
             ((_, SigFigs(lhs_sf)), (_, SigFigs(rhs_sf))) => {
                 let last_known_digit = i32::max(lhs_order - lhs_sf, rhs_order - rhs_sf);
                 SigFigs((new_order - last_known_digit).max(0))
@@ -67,6 +72,19 @@ impl Scalar {
         self.add(&-other.clone())
     }
 
+    pub fn pow(&self, other: &Self, instance: &Instance) -> Result<Self, ()> {
+        if other.unit().is_identity() && other.precision == Precision::Exact {
+            let mut res = self.clone();
+            let exp = other.display_value(instance);
+            res.value = res.value.powf(exp);
+            res.unit.pow(exp);
+            res.display_unit.pow(exp);
+            Ok(res)
+        } else {
+            Err(())
+        }
+    }
+
     pub fn format(&self, into: &mut String) {
         macro_rules! put {
             ($($t:tt)*) => {
@@ -74,6 +92,18 @@ impl Scalar {
             }
         };
         put!("Test");
+    }
+
+    pub fn unit(&self) -> &CompositeUnitClass {
+        &self.unit
+    }
+
+    pub fn display_unit(&self) -> &CompositeUnit {
+        &self.display_unit
+    }
+
+    pub fn display_value(&self, instance: &Instance) -> f64 {
+        self.value * self.display_unit.base_ratio(instance)
     }
 }
 
@@ -83,6 +113,9 @@ impl Mul for Scalar {
         use Precision::*;
         // https://www.utm.edu/staff/cerkal/Lect4.html
         let new_precision = match ((self.value, self.precision), (rhs.value, rhs.precision)) {
+            ((_, Exact), (_, Exact)) => Exact,
+            ((_, Exact), (_, other)) => other,
+            ((_, other), (_, Exact)) => other,
             ((_, SigFigs(lhs_sf)), (_, SigFigs(rhs_sf))) => SigFigs(lhs_sf.min(rhs_sf)),
             ((_, PercentError(pct)), (rhs_value, rhs))
             | ((rhs_value, rhs), (_, PercentError(pct))) => {
@@ -105,6 +138,9 @@ impl Div for Scalar {
         use Precision::*;
         // https://www.utm.edu/staff/cerkal/Lect4.html
         let new_precision = match ((self.value, self.precision), (rhs.value, rhs.precision)) {
+            ((_, Exact), (_, Exact)) => Exact,
+            ((_, Exact), (_, other)) => other,
+            ((_, other), (_, Exact)) => other,
             ((_, SigFigs(lhs_sf)), (_, SigFigs(rhs_sf))) => SigFigs(lhs_sf.min(rhs_sf)),
             ((_, PercentError(pct)), (rhs_value, rhs))
             | ((rhs_value, rhs), (_, PercentError(pct))) => {
