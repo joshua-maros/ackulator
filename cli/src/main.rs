@@ -14,4 +14,6 @@ fn main() {
     };
     instance.add_unit(unit, UnitPrefixType::Metric).unwrap();
     println!("{:#?}", instance);
+
+    println!("{:#?}", ackulator::expression::parse_expression("1 * (2 + Hello) * World * 1 ^ 2 ^ 3"));
 }
