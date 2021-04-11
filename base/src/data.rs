@@ -1,21 +1,50 @@
-use std::fmt::{Debug, Formatter};
-
+use std::fmt::{Debug, Formatter, Write};
 use crate::{entity::Entity, prelude::*};
 
-#[derive(Clone)]
-pub enum MetaData {
-    UnitClass(CompositeUnitClass),
-    Unit(CompositeUnit),
-    EntityClass(EntityClassId),
+pub trait Describe {
+    fn describe(&self, into: &mut String, instance: &Instance);
 }
 
-impl Debug for MetaData {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnitClass(v) => write!(f, "{:?}", v),
-            Self::Unit(v) => write!(f, "{:?}", v),
-            Self::EntityClass(v) => write!(f, "{:?}", v),
+macro_rules! make_enum {
+    ($EnumName:ident { $($VariantName:ident($Contents:ident),)* }) => {
+        #[derive(Clone)]
+        pub enum $EnumName {
+            $($VariantName($Contents),)*
         }
+        impl Debug for $EnumName {
+            fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+                match self {
+                    $(Self::$VariantName(v) => write!(f, "{:?}", v),)*
+                }
+            }
+        }
+        impl Describe for $EnumName {
+            fn describe(&self, into: &mut String, instance: &Instance) {
+                match self {
+                    $(Self::$VariantName(v) => v.describe(into, instance),)*
+                }
+            }
+        }
+    }
+}
+
+make_enum! {
+    MetaData {
+        UnitClass(CompositeUnitClass),
+        Unit(CompositeUnit),
+        EntityClass(EntityClassId),
+    }
+}
+make_enum! {
+    ValueData {
+        Scalar(Scalar),
+        Entity(Entity),
+    }
+}
+make_enum! {
+    Data {
+        Meta(MetaData),
+        Value(ValueData),
     }
 }
 
@@ -40,38 +69,8 @@ from_into!(CompositeUnit MetaData Unit);
 from_into!(UnitId MetaData Unit);
 from_into!(EntityClassId MetaData EntityClass);
 
-#[derive(Clone)]
-pub enum ValueData {
-    Scalar(Scalar),
-    Entity(Entity),
-}
-
-impl Debug for ValueData {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Scalar(v) => write!(f, "{:?}", v),
-            Self::Entity(v) => write!(f, "{:?}", v),
-        }
-    }
-}
-
 from_into!(Scalar ValueData Scalar);
 from_into!(Entity ValueData Entity);
-
-#[derive(Clone)]
-pub enum Data {
-    Meta(MetaData),
-    Value(ValueData),
-}
-
-impl Debug for Data {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Meta(v) => write!(f, "{:?}", v),
-            Self::Value(v) => write!(f, "{:?}", v),
-        }
-    }
-}
 
 impl From<MetaData> for Data {
     fn from(item: MetaData) -> Self {

@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::{data::Describe, prelude::*};
 use std::{
     fmt::Write,
     ops::{Div, Mul, Neg},
@@ -85,15 +85,6 @@ impl Scalar {
         }
     }
 
-    pub fn format(&self, into: &mut String) {
-        macro_rules! put {
-            ($($t:tt)*) => {
-                write!(into, $($t)*).unwrap();
-            }
-        };
-        put!("Test");
-    }
-
     pub fn unit(&self) -> &CompositeUnitClass {
         &self.unit
     }
@@ -104,6 +95,21 @@ impl Scalar {
 
     pub fn display_value(&self, instance: &Instance) -> f64 {
         self.value * self.display_unit.base_ratio(instance)
+    }
+}
+
+impl Describe for Scalar {
+    fn describe(&self, into: &mut String, instance: &Instance) {
+        macro_rules! put {
+            ($($t:tt)*) => {
+                write!(into, $($t)*).unwrap();
+            }
+        }
+        put!("{}", self.value / self.display_unit.base_ratio(instance));
+        if !self.display_unit.is_identity() {
+            put!(" ");
+            self.display_unit.describe(into, instance);
+        }
     }
 }
 
@@ -151,8 +157,8 @@ impl Div for Scalar {
         Self {
             value: self.value / rhs.value,
             precision: new_precision,
-            unit: self.unit * rhs.unit,
-            display_unit: self.display_unit * rhs.display_unit,
+            unit: self.unit / rhs.unit,
+            display_unit: self.display_unit / rhs.display_unit,
         }
     }
 }

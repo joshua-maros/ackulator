@@ -1,3 +1,4 @@
+use crate::{data::Describe, prelude::Instance};
 use std::{
     fmt::{Debug, Formatter},
     ops::{Index, IndexMut},
@@ -5,6 +6,16 @@ use std::{
 
 #[derive(Hash)]
 pub struct StorageId<T>(usize, std::marker::PhantomData<T>);
+
+impl<T> Describe for StorageId<T>
+where
+    T: Describe,
+    Instance: Index<StorageId<T>, Output = T>,
+{
+    fn describe(&self, into: &mut String, instance: &Instance) {
+        instance[*self].describe(into, instance);
+    }
+}
 
 impl<T> Clone for StorageId<T> {
     fn clone(&self) -> Self {

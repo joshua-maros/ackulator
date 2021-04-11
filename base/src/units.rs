@@ -1,6 +1,6 @@
-use crate::prelude::*;
+use crate::{data::Describe, prelude::*};
 use std::{
-    fmt::{Debug, Formatter},
+    fmt::{Debug, Formatter, Write},
     ops::{Div, DivAssign, Mul, MulAssign},
 };
 
@@ -92,6 +92,29 @@ impl<I: Eq + Copy + Debug> Composite<I> {
     }
 }
 
+impl Describe for CompositeUnitClass {
+    fn describe(&self, into: &mut String, instance: &Instance) {
+        if self.is_identity() {
+            return;
+        }
+        if self.numerator_factors.len() == 0 {
+            write!(into, "1").unwrap();
+        } else {
+            write!(into, "{}", instance[self.numerator_factors[0]].names[0]).unwrap();
+            for unit in &self.numerator_factors[1..] {
+                write!(into, " * {}", instance[*unit].names[0]).unwrap();
+            }
+        }
+        if self.denominator_factors.len() > 0 {
+            write!(into, "/").unwrap();
+            write!(into, "{}", instance[self.denominator_factors[0]].names[0]).unwrap();
+            for unit in &self.denominator_factors[1..] {
+                write!(into, " * {}", instance[*unit].names[0]).unwrap();
+            }
+        }
+    }
+}
+
 impl CompositeUnit {
     pub fn base_ratio(&self, instance: &Instance) -> f64 {
         let mut ratio = 1.0;
@@ -122,6 +145,26 @@ impl CompositeUnit {
             self.unit_class(instance),
             self.clone(),
         )
+    }
+}
+
+impl Describe for CompositeUnit {
+    fn describe(&self, into: &mut String, instance: &Instance) {
+        if self.is_identity() {
+            return;
+        }
+        for unit in &self.numerator_factors {
+            write!(into, "{}", instance[*unit].symbol).unwrap();
+        }
+        if self.numerator_factors.len() == 0 {
+            write!(into, "1").unwrap();
+        }
+        if self.denominator_factors.len() > 0 {
+            write!(into, "/").unwrap();
+        }
+        for unit in &self.denominator_factors {
+            write!(into, "{}", instance[*unit].symbol).unwrap();
+        }
     }
 }
 

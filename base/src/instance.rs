@@ -1,8 +1,9 @@
 use crate::{
-    data::{AmbiguousItem, Data, MetaData, ValueData},
+    data::{AmbiguousItem, Data, Describe, MetaData, ValueData},
     entity::{Entity, EntityClass},
     expression::{BinaryOp, Expression, UnaryOp},
     prelude::*,
+    statement::Statement,
     storage::{StorageId, StoragePool},
 };
 use paste::paste;
@@ -247,7 +248,6 @@ impl AmbiguityResolutionContext {
 impl Instance {
     fn resolve_unary_expression(&self, op: UnaryOp, rhs: Data) -> Result<Data, ()> {
         use Data::*;
-        use MetaData::*;
         use UnaryOp::*;
         use ValueData::*;
         match op {
@@ -363,5 +363,27 @@ impl Instance {
             )
             .into(),
         })
+    }
+}
+
+impl Instance {
+    pub fn execute_statement(&mut self, statement: &Statement) -> Result<(), ()> {
+        match statement {
+            Statement::MakeUnitClass(names) => unimplemented!(),
+            Statement::MakeBaseUnit(names, properties) => {
+                unimplemented!()
+            }
+            Statement::MakeDerivedUnit(names, properties) => unimplemented!(),
+            Statement::MakeEntityClass(names, properties) => unimplemented!(),
+            Statement::MakeLabel(names, value) => unimplemented!(),
+            Statement::MakeValue(names, value) => unimplemented!(),
+            Statement::Show(value) => {
+                let value = self.resolve_expression(value, Default::default())?;
+                let mut description = String::new();
+                value.describe(&mut description, self);
+                println!("{}", description);
+            }
+        }
+        Ok(())
     }
 }
