@@ -24,7 +24,7 @@ impl Precision {
 }
 
 #[scones::make_constructor]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Scalar {
     value: f64,
     precision: Precision,

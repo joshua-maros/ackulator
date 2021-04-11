@@ -6,6 +6,42 @@ pub struct UnitClass {
     pub names: Vec<String>,
 }
 
+pub const METRIC_PREFIXES: &[(&str, &str, f64)] = &[
+    ("Yotta", "Y", 1e24),
+    ("Zetta", "Z", 1e21),
+    ("Exa", "E", 1e18),
+    ("Peta", "P", 1e15),
+    ("Tera", "T", 1e12),
+    ("Giga", "G", 1e9),
+    ("Mega", "M", 1e6),
+    ("Kilo", "k", 1e3),
+    ("Hecto", "h", 1e2),
+    ("Deka", "da", 1e1),
+    // ----------------
+    ("Deci", "d", 1e-1),
+    ("Centi", "c", 1e-2),
+    ("Milli", "m", 1e-3),
+    ("Micro", "μ", 1e-6),
+    ("Nano", "n", 1e-9),
+    ("Pico", "p", 1e-12),
+    ("Femto", "f", 1e-15),
+    ("Atto", "a", 1e-18),
+    ("Zepto", "z", 1e-21),
+    ("Yocto", "y", 1e-24),
+];
+pub const SMALL_PREFIXES_START: usize = 10;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum UnitPrefixType {
+    /// A plain unit.
+    None,
+    /// Add prefixes like milli, giga, etc.
+    Metric,
+    /// Add prefixes that reduce magnitude but not ones that increase it. This is basically only
+    /// used for seconds because milliseconds are a thing but kiloseconds aren't.
+    PartialMetric,
+}
+
 #[derive(Clone, Debug)]
 pub struct Unit {
     pub names: Vec<String>,
