@@ -1,7 +1,8 @@
 const BOOTSTRAP: &str = r#"
-make unit_class called Length
 make entity_class called metric
 make entity_class called partial_metric
+
+make unit_class called Length
 make base_unit called Meter, Meters {
     class: Length,
     symbol: "m",
@@ -11,15 +12,21 @@ make derived_unit called Foot, Feet {
     symbol: "ft",
     value: 0.3048 * Meters,
 }
-show 1 * Foot * 1 * Meter
+
+make unit_class called Time
+make base_unit called Second, Seconds {
+    class: Time,
+    symbol: "s",
+    partial_metric,
+}
+
+show 2 * Meters / Second / Second
 "#;
 
 fn main() {
     let mut instance = ackulator::instance::Instance::new();
 
     // println!("{}", &BOOTSTRAP[37..]);
-    // let res = ackulator::expression::parse_expression("{ s: \"asdf\",\nclass, }").unwrap();
-    // println!("{:#?}", res);
     let (remainder, statements) = ackulator::statement::parse_statements(BOOTSTRAP).unwrap();
     assert_eq!(remainder.len(), 0, "{}", remainder);
 
@@ -27,4 +34,7 @@ fn main() {
         // println!("{:#?}", statement);
         instance.execute_statement(statement).unwrap();
     }
+
+    let res = ackulator::expression::parse_expression("1 * Meter + 1 * Feet").unwrap();
+    println!("{:#?}", instance.resolve_expression(&res.1, Default::default()));
 }

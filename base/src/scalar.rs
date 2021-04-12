@@ -111,7 +111,6 @@ impl Describe for Scalar {
         }
         put!("{}", self.value / self.display_unit.base_ratio(instance));
         if !self.display_unit.is_identity() {
-            put!(" ");
             self.display_unit.describe(into, instance);
         }
     }

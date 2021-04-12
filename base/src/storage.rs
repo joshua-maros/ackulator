@@ -1,5 +1,6 @@
 use crate::{data::Describe, prelude::Instance};
 use std::{
+    cmp::Ordering,
     fmt::{Debug, Formatter},
     hash::{Hash, Hasher},
     ops::{Index, IndexMut},
@@ -50,6 +51,18 @@ impl<T> Debug for StorageId<T> {
 impl<T> Hash for StorageId<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.hash(state)
+    }
+}
+
+impl<T> PartialOrd for StorageId<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+impl<T> Ord for StorageId<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
     }
 }
 

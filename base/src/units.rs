@@ -1,7 +1,9 @@
-use crate::{data::Describe, prelude::*};
+use crate::{data::Describe, prelude::*, storage::StorageId};
 use std::{
+    cmp::Ordering,
     fmt::{Debug, Formatter, Write},
-    ops::{Div, DivAssign, Mul, MulAssign},
+    hash::Hash,
+    ops::{Div, DivAssign, Index, Mul, MulAssign},
 };
 
 #[derive(Clone, Debug)]
@@ -45,6 +47,118 @@ pub enum UnitPrefixType {
     PartialMetric,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct QuantityBag<T: Ord> {
+    items: Vec<(f64, T)>,
+}
+
+impl<T: Ord> QuantityBag<T> {
+    fn item_index(&self, item: &T) -> Result<usize, usize> {
+        self.items
+            .binary_search_by(|candidate| candidate.1.cmp(item))
+    }
+
+    fn add(&mut self, item: T, amount: f64) {
+        match self.item_index(&item) {
+            Ok(exists_index) => {
+                self.items[exists_index].0 += amount;
+                if self.items[exists_index].0.abs() < 1e-10 {
+                    self.items.remove(exists_index);
+                }
+            }
+            Err(insert_at) => self.items.insert(insert_at, (amount, item)),
+        }
+    }
+
+    fn mul(&mut self, factor: f64) {
+        for (quantity, _) in &mut self.items {
+            *quantity *= factor;
+        }
+    }
+
+    fn union(self, other: Self) -> Self
+    where
+        T: Clone,
+    {
+        if self.items.len() == 0 {
+            return other;
+        }
+        if other.items.len() == 0 {
+            return self;
+        }
+        let mut self_items = self.items.into_iter();
+        let mut other_items = other.items.into_iter();
+        let mut new_items = Vec::new();
+        let mut a = self_items.next().unwrap();
+        let mut b = other_items.next().unwrap();
+        loop {
+            match a.1.cmp(&b.1) {
+                Ordering::Equal => {
+                    let new_quantity = a.0 + b.0;
+                    if new_quantity.abs() > 1e-10 {
+                        new_items.push((new_quantity, a.1));
+                    }
+                    match (self_items.next(), other_items.next()) {
+                        (Some(na), Some(nb)) => {
+                            a = na;
+                            b = nb;
+                        }
+                        (Some(na), None) => {
+                            new_items.push(na);
+                            break;
+                        }
+                        (None, Some(nb)) => {
+                            new_items.push(nb);
+                            break;
+                        }
+                        (None, None) => break,
+                    }
+                }
+                Ordering::Greater => {
+                    new_items.push(b);
+                    match other_items.next() {
+                        Some(item) => b = item,
+                        None => {
+                            new_items.push(a);
+                            break;
+                        }
+                    }
+                }
+                Ordering::Less => {
+                    new_items.push(a);
+                    match self_items.next() {
+                        Some(item) => a = item,
+                        None => {
+                            new_items.push(b);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        for extra in self_items {
+            new_items.push(extra);
+        }
+        for extra in other_items {
+            new_items.push(extra);
+        }
+        debug_assert!({
+            let mut sorted = new_items.clone();
+            sorted.sort_by(|a, b| a.1.cmp(&b.1));
+            sorted == new_items
+        });
+        Self { items: new_items }
+    }
+
+    fn get(&self, item: &T) -> f64 {
+        if let Ok(exists_at) = self.item_index(item) {
+            self.items[exists_at].0
+        } else {
+            0.0
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Unit {
     pub names: Vec<String>,
@@ -55,40 +169,41 @@ pub struct Unit {
 }
 
 #[derive(Clone)]
-pub struct Composite<I: Eq + Copy + Debug> {
-    pub numerator_factors: Vec<I>,
-    pub denominator_factors: Vec<I>,
+pub struct Composite<I: Ord + Eq + Copy + Debug> {
+    factors: QuantityBag<I>,
 }
 
 pub type CompositeUnitClass = Composite<UnitClassId>;
 pub type CompositeUnit = Composite<UnitId>;
 
-impl<I: Eq + Copy + Debug> Composite<I> {
+impl<I: Ord + Eq + Copy + Debug> Composite<I> {
     pub fn identity() -> Self {
         Self {
-            numerator_factors: Vec::new(),
-            denominator_factors: Vec::new(),
+            factors: QuantityBag { items: Vec::new() },
         }
     }
 
     pub fn is_identity(&self) -> bool {
-        self.numerator_factors.len() == 0 && self.denominator_factors.len() == 0
-    }
-
-    pub fn simplify(&mut self) {
-        for ni in (0..self.numerator_factors.len()).rev() {
-            for di in (0..self.denominator_factors.len()).rev() {
-                if self.numerator_factors[ni] == self.denominator_factors[di] {
-                    self.numerator_factors.remove(ni);
-                    self.denominator_factors.remove(di);
-                    break;
-                }
-            }
-        }
+        self.factors.items.len() == 0
     }
 
     pub fn pow(&mut self, _exp: f64) {
         unimplemented!()
+    }
+}
+
+fn describe_factor<T>(
+    into: &mut String,
+    instance: &Instance,
+    factor: &(f64, StorageId<T>),
+    factor_describer: impl Fn(&T) -> &str,
+) where
+    Instance: Index<StorageId<T>, Output = T>,
+{
+    let power = factor.0;
+    write!(into, "{}", factor_describer(&instance[factor.1])).unwrap();
+    if (power - 1.0).abs() > 1e-10 {
+        write!(into, "^{}", power).unwrap();
     }
 }
 
@@ -97,19 +212,32 @@ impl Describe for CompositeUnitClass {
         if self.is_identity() {
             return;
         }
-        if self.numerator_factors.len() == 0 {
-            write!(into, "1").unwrap();
-        } else {
-            write!(into, "{}", instance[self.numerator_factors[0]].names[0]).unwrap();
-            for unit in &self.numerator_factors[1..] {
-                write!(into, " * {}", instance[*unit].names[0]).unwrap();
+        let mut numerator = Vec::new();
+        let mut denominator = Vec::new();
+        for item in &self.factors.items {
+            if item.0 > 0.0 {
+                numerator.push(item);
+            } else {
+                denominator.push(item);
             }
         }
-        if self.denominator_factors.len() > 0 {
+        if numerator.len() == 0 {
+            write!(into, "1").unwrap();
+        } else {
+            describe_factor(into, instance, numerator[0], |uc| &uc.names[0][..]);
+            for factor in &numerator[1..] {
+                write!(into, " * ").unwrap();
+                describe_factor(into, instance, factor, |uc| &uc.names[0][..]);
+            }
+        }
+        if denominator.len() > 0 {
             write!(into, "/").unwrap();
-            write!(into, "{}", instance[self.denominator_factors[0]].names[0]).unwrap();
-            for unit in &self.denominator_factors[1..] {
-                write!(into, " * {}", instance[*unit].names[0]).unwrap();
+            let factor = (-denominator[0].0, denominator[0].1);
+            describe_factor(into, instance, &factor, |uc| &uc.names[0][..]);
+            for factor in &denominator[1..] {
+                let factor = (-factor.0, factor.1);
+                write!(into, " * ").unwrap();
+                describe_factor(into, instance, &factor, |uc| &uc.names[0][..]);
             }
         }
     }
@@ -118,24 +246,20 @@ impl Describe for CompositeUnitClass {
 impl CompositeUnit {
     pub fn base_ratio(&self, instance: &Instance) -> f64 {
         let mut ratio = 1.0;
-        for factor_id in &self.numerator_factors {
-            ratio *= instance[*factor_id].base_ratio;
-        }
-        for factor_id in &self.denominator_factors {
-            ratio /= instance[*factor_id].base_ratio;
+        for (power, unit) in &self.factors.items {
+            ratio *= instance[*unit].base_ratio.powf(*power);
         }
         ratio
     }
 
     pub fn unit_class(&self, instance: &Instance) -> CompositeUnitClass {
-        let mut class = CompositeUnitClass::identity();
-        for fac in self.numerator_factors.iter() {
-            class *= instance[*fac].class.clone();
+        let mut result = CompositeUnitClass::identity();
+        for (power, unit_id) in &self.factors.items {
+            let mut class = instance[*unit_id].class.clone();
+            class.factors.mul(*power);
+            result.factors = result.factors.union(class.factors);
         }
-        for fac in self.denominator_factors.iter() {
-            class /= instance[*fac].class.clone();
-        }
-        class
+        result
     }
 
     pub fn as_scalar(&self, instance: &Instance) -> Scalar {
@@ -153,93 +277,143 @@ impl Describe for CompositeUnit {
         if self.is_identity() {
             return;
         }
-        for unit in &self.numerator_factors {
-            write!(into, "{}", instance[*unit].symbol).unwrap();
+        let mut numerator = Vec::new();
+        let mut denominator = Vec::new();
+        for item in &self.factors.items {
+            if item.0 > 0.0 {
+                numerator.push(item);
+            } else {
+                denominator.push(item);
+            }
         }
-        if self.numerator_factors.len() == 0 {
+
+        let nl = numerator.len();
+        for factor in numerator {
+            describe_factor(into, instance, factor, |u| &u.symbol[..]);
+        }
+        if nl == 0 {
             write!(into, "1").unwrap();
         }
-        if self.denominator_factors.len() > 0 {
+        if denominator.len() > 0 {
             write!(into, "/").unwrap();
         }
-        for unit in &self.denominator_factors {
-            write!(into, "{}", instance[*unit].symbol).unwrap();
+        for factor in denominator {
+            let factor = (-factor.0, factor.1);
+            describe_factor(into, instance, &factor, |u| &u.symbol[..]);
         }
     }
 }
 
-impl<I: Eq + Copy + Debug> Debug for Composite<I> {
+impl<I: Ord + Eq + Copy + Debug> Debug for Composite<I> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.numerator_factors.len() == 0 {
-            write!(f, "1")?;
-        } else if self.numerator_factors.len() == 1 {
-            write!(f, "{:?}", self.numerator_factors[0])?;
-        } else {
-            write!(f, "({:?}", self.numerator_factors[0])?;
-            for factor in &self.numerator_factors[1..] {
-                write!(f, " * {:?} ", factor)?;
+        let mut first = true;
+        for (power, item) in &self.factors.items {
+            if first {
+                first = false;
+            } else {
+                write!(f, " * ")?;
             }
-            write!(f, ")")?;
+            write!(f, "({:?})^{}", item, power)?;
         }
-        if self.denominator_factors.len() == 1 {
-            write!(f, "/ {:?}", self.denominator_factors[0])?;
-        } else if self.denominator_factors.len() > 1 {
-            write!(f, "/ ({:?}", self.denominator_factors[0])?;
-            for factor in &self.denominator_factors[1..] {
-                write!(f, " * {:?} ", factor)?;
-            }
-            write!(f, ")")?;
+        if self.factors.items.len() == 0 {
+            write!(f, "1")?;
         }
         Ok(())
     }
 }
 
-impl<I: Eq + Copy + Debug> From<I> for Composite<I> {
+impl<I: Ord + Eq + Copy + Debug> From<I> for Composite<I> {
     fn from(item: I) -> Self {
         Self {
-            numerator_factors: vec![item],
-            denominator_factors: Vec::new(),
+            factors: QuantityBag {
+                items: vec![(1.0, item)],
+            },
         }
     }
 }
 
-impl<I: Eq + Copy + Debug> Mul for Composite<I> {
+impl<I: Ord + Eq + Copy + Debug> Mul for Composite<I> {
     type Output = Self;
-    fn mul(mut self, mut rhs: Self) -> Self::Output {
-        self.numerator_factors.append(&mut rhs.numerator_factors);
-        self.denominator_factors
-            .append(&mut rhs.denominator_factors);
-        self.simplify();
+    fn mul(mut self, rhs: Self) -> Self::Output {
+        self.factors = self.factors.union(rhs.factors);
         self
     }
 }
 
-impl<I: Eq + Copy + Debug> MulAssign for Composite<I> {
+impl<I: Ord + Eq + Copy + Debug> MulAssign for Composite<I> {
     fn mul_assign(&mut self, rhs: Self) {
         *self = self.clone() * rhs;
     }
 }
 
-impl<I: Eq + Copy + Debug> Div for Composite<I> {
+impl<I: Ord + Eq + Copy + Debug> Div for Composite<I> {
     type Output = Self;
     fn div(mut self, mut rhs: Self) -> Self::Output {
-        self.numerator_factors.append(&mut rhs.denominator_factors);
-        self.denominator_factors.append(&mut rhs.numerator_factors);
-        self.simplify();
+        rhs.factors.mul(-1.0);
+        self.factors = self.factors.union(rhs.factors);
         self
     }
 }
 
-impl<I: Eq + Copy + Debug> DivAssign for Composite<I> {
+impl<I: Ord + Eq + Copy + Debug> DivAssign for Composite<I> {
     fn div_assign(&mut self, rhs: Self) {
         *self = self.clone() * rhs;
     }
 }
 
-impl<I: Eq + Copy + Debug> PartialEq for Composite<I> {
+impl<I: Ord + Eq + Copy + Debug> PartialEq for Composite<I> {
     fn eq(&self, other: &Self) -> bool {
         (self.clone() / other.clone()).is_identity()
     }
 }
 
-impl<I: Eq + Copy + Debug> Eq for Composite<I> {}
+impl<I: Ord + Eq + Copy + Debug> Eq for Composite<I> {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn union_operation() {
+        let mut set1 = QuantityBag { items: Vec::new() };
+        set1.add(7, 10.0);
+        set1.add(9, 10.0);
+        set1.add(3, 1.0);
+        set1.add(5, 1.0);
+        set1.add(2, 1.0);
+        let mut set2 = QuantityBag { items: Vec::new() };
+        set2.add(1, 1.0);
+        set2.add(2, 1.0);
+        set2.add(3, 1.0);
+        let set = set1.union(set2);
+        assert_eq!(set.items.len(), 6);
+        assert_eq!(set.get(&2), 2.0);
+        assert_eq!(set.get(&9), 10.0);
+    }
+
+    #[test]
+    fn fully_disjoint_union_operation() {
+        let mut set1 = QuantityBag { items: Vec::new() };
+        set1.add(1, 10.0);
+        let mut set2 = QuantityBag { items: Vec::new() };
+        set2.add(2, 20.0);
+        let set = set1.clone().union(set2.clone());
+        assert_eq!(set.items.len(), 2);
+        assert_eq!(set.get(&1), 10.0);
+        assert_eq!(set.get(&2), 20.0);
+
+        // Check that the operator is symmetric
+        assert_eq!(set, set2.union(set1));
+    }
+
+    #[test]
+    fn union_operation_cancel_out() {
+        let mut set1 = QuantityBag { items: Vec::new() };
+        set1.add(1, 10.0);
+        let mut set2 = set1.clone();
+        set2.mul(-1.0);
+        // The two sets should cancel out to make an empty set.
+        let set = set1.union(set2);
+        assert_eq!(set.items.len(), 0);
+    }
+}
