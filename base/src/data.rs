@@ -28,6 +28,12 @@ macro_rules! make_enum {
     }
 }
 
+impl Describe for String {
+    fn describe(&self, into: &mut String, instance: &Instance) {
+        write!(into, "{}", self).unwrap();
+    }
+}
+
 make_enum! {
     MetaData {
         UnitClass(CompositeUnitClass),
@@ -39,6 +45,7 @@ make_enum! {
     ValueData {
         Scalar(Scalar),
         Entity(Entity),
+        String(String),
     }
 }
 make_enum! {
@@ -87,6 +94,6 @@ impl From<ValueData> for Data {
 #[derive(Clone, Debug)]
 pub struct AmbiguousItem<'a> {
     pub as_meta: Option<&'a MetaData>,
-    pub as_value: Option<&'a ValueData>,
+    pub as_value: Option<&'a Entity>,
     pub as_label: Option<(&'a String, &'a Data)>,
 }

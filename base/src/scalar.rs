@@ -96,6 +96,10 @@ impl Scalar {
     pub fn display_value(&self, instance: &Instance) -> f64 {
         self.value * self.display_unit.base_ratio(instance)
     }
+
+    pub fn raw_value(&self) -> f64 {
+        self.value
+    }
 }
 
 impl Describe for Scalar {

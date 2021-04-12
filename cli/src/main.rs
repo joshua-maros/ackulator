@@ -35,5 +35,5 @@ fn main() {
         "show 30 * Kilometers / Second + 1 * Meter / Millisecond",
     )
     .unwrap();
-    instance.execute_statement(&statement).unwrap();
+    instance.execute_statement(statement).unwrap();
 }

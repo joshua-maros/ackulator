@@ -2,7 +2,7 @@ use crate::{
     data::{Data, Describe},
     prelude::{EntityClassId, Instance},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 #[derive(Clone, Debug)]
@@ -19,15 +19,16 @@ impl Describe for EntityClass {
 #[derive(Clone, Debug)]
 pub struct Entity {
     pub properties: HashMap<String, Data>,
-    pub classes: Vec<EntityClassId>,
+    pub classes: HashSet<EntityClassId>,
 }
 
 impl Describe for Entity {
     fn describe(&self, into: &mut String, instance: &Instance) {
         write!(into, "{{ ").unwrap();
-        if self.classes.len() > 0 {
-            self.classes[0].describe(into, instance);
-            for class in &self.classes[1..] {
+        let mut iter = self.classes.iter();
+        if let Some(first) = iter.next() {
+            first.describe(into, instance);
+            for class in iter {
                 write!(into, ", ").unwrap();
                 class.describe(into, instance);
             }

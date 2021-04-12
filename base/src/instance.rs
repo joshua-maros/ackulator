@@ -7,7 +7,12 @@ use crate::{
     storage::{StorageId, StoragePool},
 };
 use paste::paste;
-use std::{collections::HashMap, fmt::Debug, hash::Hash, ops::Index};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    hash::Hash,
+    ops::Index,
+};
 
 pub type UnitClassId = StorageId<UnitClass>;
 pub type UnitId = StorageId<Unit>;
@@ -60,7 +65,7 @@ pub struct Instance {
     entity_classes: StoragePool<EntityClass>,
 
     meta_items: ManyToOneMap<String, MetaData>,
-    values: ManyToOneMap<String, ValueData>,
+    values: ManyToOneMap<String, Entity>,
     labels: ManyToOneMap<String, Data>,
 }
 
@@ -178,7 +183,7 @@ impl Instance {
 
     /// Returns Err(()) if one of the provided names is already declared. If this happens, none
     /// of the names passed will be defined.
-    fn declare_value(&mut self, names: Vec<String>, data: ValueData) -> Result<(), ()> {
+    fn declare_value(&mut self, names: Vec<String>, data: Entity) -> Result<(), ()> {
         if self.values.contains_any_key(&names) {
             return Err(());
         }
@@ -266,10 +271,12 @@ impl Instance {
         match (lhs, rhs) {
             (Meta(EntityClass(..)), _) => Err(()),
             (_, Meta(EntityClass(..))) => Err(()),
-            (Value(Entity(..)), _) => Err(()),
-            (_, Value(Entity(..))) => Err(()),
             (Meta(Unit(..)), Meta(UnitClass(..))) => Err(()),
             (Meta(UnitClass(..)), Meta(Unit(..))) => Err(()),
+            (Value(Entity(..)), _) => Err(()),
+            (_, Value(Entity(..))) => Err(()),
+            (Value(String(..)), _) => Err(()),
+            (_, Value(String(..))) => Err(()),
 
             (Meta(Unit(lhs)), Meta(Unit(rhs))) => match op {
                 Add | Sub | Pow => Err(()),
@@ -326,10 +333,10 @@ impl Instance {
                 properties,
                 class_names,
             } => {
-                let mut classes = Vec::new();
+                let mut classes = HashSet::new();
                 for name in class_names {
                     if let Some(MetaData::EntityClass(class_id)) = self.meta_items.get(name) {
-                        classes.push(*class_id);
+                        classes.insert(*class_id);
                     } else {
                         return Err(());
                     }
@@ -366,19 +373,146 @@ impl Instance {
     }
 }
 
-impl Instance {
-    pub fn execute_statement(&mut self, statement: &Statement) -> Result<(), ()> {
-        match statement {
-            Statement::MakeUnitClass(names) => unimplemented!(),
-            Statement::MakeBaseUnit(names, properties) => {
-                unimplemented!()
+macro_rules! make_properties_struct {
+    (__impl store $into:ident from CompositeUnitClass) => {
+        Data::Meta(MetaData::UnitClass($into))
+    };
+    (__impl store $into:ident from Scalar) => {
+        Data::Value(ValueData::Scalar($into))
+    };
+    (__impl store $into:ident from String) => {
+        Data::Value(ValueData::String($into))
+    };
+    (__impl store $into:ident from $TypeName:ty) => {
+        compile_error!(
+            concat!(
+                "make_properties_struct does not support capturing ",
+                stringify!($TypeName),
+            )
+        );
+    };
+    ($StructName:ident { $($field_name:ident: $FieldType:ty,)* } [ $($class_name:ident,)* ]) => {
+        paste! {
+            #[allow(non_snake_case)]
+            mod [<$StructName Impl>] {
+                use crate::data::*;
+                use crate::prelude::*;
+                pub struct $StructName {
+                    $(pub $field_name: $FieldType,)*
+                    $(pub [<has_ $class_name>]: bool,)*
+                }
+                impl $StructName {
+                    pub fn from_data(data: Data, instance: &Instance) -> Result<Self, ()> {
+                        let mut entity = if let Data::Value(ValueData::Entity(entity)) = data {
+                            entity
+                        } else {
+                            return Err(())
+                        };
+                        $(let $field_name = if let
+                            Some(make_properties_struct!(__impl store value from $FieldType))
+                            = entity.properties.remove(stringify!($field_name)) {
+                            value
+                        } else {
+                            return Err(());
+                        };)*
+                        $(
+                            let class_item = instance.lookup_item(&String::from(stringify!($class_name)));
+                            let class_id = if let Some(MetaData::EntityClass(id)) = class_item.as_meta {
+                                *id
+                            } else {
+                                return Err(())
+                            };
+                            let [<has_ $class_name>] = entity.classes.remove(&class_id);
+                        )*
+                        if entity.properties.len() > 0 {
+                            return Err(());
+                        }
+                        if entity.classes.len() > 0 {
+                            return Err(());
+                        }
+                        Ok(Self {
+                            $($field_name,)*
+                            $([<has_ $class_name>],)*
+                        })
+                    }
+                }
             }
-            Statement::MakeDerivedUnit(names, properties) => unimplemented!(),
-            Statement::MakeEntityClass(names, properties) => unimplemented!(),
-            Statement::MakeLabel(names, value) => unimplemented!(),
-            Statement::MakeValue(names, value) => unimplemented!(),
+            use [<$StructName Impl>]::$StructName;
+        }
+    };
+}
+
+make_properties_struct! {
+    BaseUnitProperties {
+        class: CompositeUnitClass,
+        symbol: String,
+    } [ metric, partial_metric, ]
+}
+make_properties_struct! {
+    DerivedUnitProperties {
+        symbol: String,
+        value: Scalar,
+    } [ metric, partial_metric, ]
+}
+
+impl Instance {
+    pub fn execute_statement(&mut self, statement: Statement) -> Result<(), ()> {
+        match statement {
+            Statement::MakeUnitClass(names) => {
+                self.add_unit_class(UnitClass { names })?;
+            }
+            Statement::MakeBaseUnit(names, properties) => {
+                let properties = self.resolve_expression(&properties, Default::default())?;
+                let properties = BaseUnitProperties::from_data(properties, self)?;
+                let unit = Unit {
+                    names,
+                    class: properties.class,
+                    symbol: properties.symbol,
+                    base_ratio: 1.0,
+                };
+                let prefix_type = match (properties.has_metric, properties.has_partial_metric) {
+                    (false, false) => UnitPrefixType::None,
+                    (true, false) => UnitPrefixType::Metric,
+                    (false, true) => UnitPrefixType::PartialMetric,
+                    _ => return Err(()),
+                };
+                self.add_unit(unit, prefix_type)?;
+            }
+            Statement::MakeDerivedUnit(names, properties) => {
+                let properties = self.resolve_expression(&properties, Default::default())?;
+                let properties = DerivedUnitProperties::from_data(properties, self)?;
+                let unit = Unit {
+                    names,
+                    class: properties.value.unit().clone(),
+                    symbol: properties.symbol,
+                    base_ratio: properties.value.raw_value(),
+                };
+                let prefix_type = match (properties.has_metric, properties.has_partial_metric) {
+                    (false, false) => UnitPrefixType::None,
+                    (true, false) => UnitPrefixType::Metric,
+                    (false, true) => UnitPrefixType::PartialMetric,
+                    _ => return Err(()),
+                };
+                self.add_unit(unit, prefix_type)?;
+            }
+            Statement::MakeEntityClass(names, _properties) => {
+                let class = EntityClass { names };
+                self.add_entity_class(class)?;
+            }
+            Statement::MakeLabel(names, value) => {
+                let data = self.resolve_expression(&value, Default::default())?;
+                self.declare_label(names, data)?;
+            }
+            Statement::MakeValue(names, value) => {
+                let data = self.resolve_expression(&value, Default::default())?;
+                if let Data::Value(ValueData::Entity(data)) = data {
+                    self.declare_value(names, data)?;
+                } else {
+                    return Err(());
+                }
+            }
             Statement::Show(value) => {
-                let value = self.resolve_expression(value, Default::default())?;
+                let value = self.resolve_expression(&value, Default::default())?;
                 let mut description = String::new();
                 value.describe(&mut description, self);
                 println!("{}", description);

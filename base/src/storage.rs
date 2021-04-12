@@ -1,10 +1,10 @@
 use crate::{data::Describe, prelude::Instance};
 use std::{
     fmt::{Debug, Formatter},
+    hash::{Hash, Hasher},
     ops::{Index, IndexMut},
 };
 
-#[derive(Hash)]
 pub struct StorageId<T>(usize, std::marker::PhantomData<T>);
 
 impl<T> Describe for StorageId<T>
@@ -44,6 +44,12 @@ impl<T> Debug for StorageId<T> {
                 .unwrap_or_default(),
             self.0
         )
+    }
+}
+
+impl<T> Hash for StorageId<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state)
     }
 }
 
