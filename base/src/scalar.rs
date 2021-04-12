@@ -73,16 +73,12 @@ impl Scalar {
     }
 
     pub fn pow(&self, other: &Self, instance: &Instance) -> Result<Self, ()> {
-        if other.unit().is_identity() && other.precision == Precision::Exact {
-            let mut res = self.clone();
-            let exp = other.display_value(instance);
-            res.value = res.value.powf(exp);
-            res.unit.pow(exp);
-            res.display_unit.pow(exp);
-            Ok(res)
-        } else {
-            Err(())
-        }
+        let mut res = self.clone();
+        let exp = other.display_value(instance);
+        res.value = res.value.powf(exp);
+        res.unit.pow(exp);
+        res.display_unit.pow(exp);
+        Ok(res)
     }
 
     pub fn unit(&self) -> &CompositeUnitClass {

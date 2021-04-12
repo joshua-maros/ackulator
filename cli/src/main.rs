@@ -20,7 +20,7 @@ make base_unit called Second, Seconds {
     partial_metric,
 }
 
-show 2 * Meters / Second / Second
+show Length ^ 3
 "#;
 
 fn main() {
@@ -35,6 +35,6 @@ fn main() {
         instance.execute_statement(statement).unwrap();
     }
 
-    let res = ackulator::expression::parse_expression("1 * Meter + 1 * Feet").unwrap();
-    println!("{:#?}", instance.resolve_expression(&res.1, Default::default()));
+    // let res = ackulator::expression::parse_expression("1 * Meter + 1 * Feet").unwrap();
+    // println!("{:#?}", instance.resolve_expression(&res.1, Default::default()));
 }

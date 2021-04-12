@@ -295,13 +295,24 @@ impl Instance {
                 Div => Ok((lhs / rhs.as_scalar(self)).into()),
             },
             (Meta(Unit(lhs)), Value(Scalar(rhs))) => match op {
-                Add | Sub | Pow => Err(()),
+                Add | Sub => Err(()),
                 Mul => Ok((lhs.as_scalar(self) * rhs).into()),
                 Div => Ok((lhs.as_scalar(self) / rhs).into()),
+                Pow => {
+                    let mut lhs = lhs;
+                    lhs.pow(rhs.display_value(self));
+                    Ok(lhs.into())
+                }
             },
-            (Value(Scalar(..)), Meta(UnitClass(..))) | (Meta(UnitClass(..)), Value(Scalar(..))) => {
-                Err(())
-            }
+            (Meta(UnitClass(lhs)), Value(Scalar(rhs))) => match op {
+                Add | Sub | Mul | Div => Err(()),
+                Pow => {
+                    let mut lhs = lhs;
+                    lhs.pow(rhs.display_value(self));
+                    Ok(lhs.into())
+                }
+            },
+            (Value(Scalar(..)), Meta(UnitClass(..))) => Err(()),
 
             (Value(Scalar(lhs)), Value(Scalar(rhs))) => match op {
                 Add => lhs.add(&rhs).map(Into::into),

@@ -71,6 +71,9 @@ impl<T: Ord> QuantityBag<T> {
     }
 
     fn mul(&mut self, factor: f64) {
+        if factor == 0.0 {
+            self.items.clear();
+        }
         for (quantity, _) in &mut self.items {
             *quantity *= factor;
         }
@@ -187,8 +190,8 @@ impl<I: Ord + Eq + Copy + Debug> Composite<I> {
         self.factors.items.len() == 0
     }
 
-    pub fn pow(&mut self, _exp: f64) {
-        unimplemented!()
+    pub fn pow(&mut self, exp: f64) {
+        self.factors.mul(exp);
     }
 }
 
