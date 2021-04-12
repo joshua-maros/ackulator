@@ -18,11 +18,11 @@ mod parse {
     use super::*;
     use nom::{
         branch::alt,
-        bytes::complete::{tag, take, take_while, take_while1},
+        bytes::complete::{tag, take, take_while1},
         character::complete::{char, one_of},
-        combinator::{not, opt, peek},
+        combinator::not,
         error::{make_error, ErrorKind},
-        multi::separated_list1,
+        multi::{many1, separated_list1},
         sequence::delimited,
         IResult,
     };
@@ -52,7 +52,7 @@ mod parse {
 
     fn identifier(input: &str) -> IResult<&str, String> {
         let (input, _) = not(one_of("0123456789"))(input)?;
-        let (input, value) = take_while1(char::is_alphanumeric)(input)?;
+        let (input, value) = take_while1(|c: char| c.is_alphanumeric() || c == '_')(input)?;
         Ok((input, value.to_owned()))
     }
 
@@ -71,15 +71,26 @@ mod parse {
         let (input, _) = tag("called")(input)?;
         let (input, names) =
             separated_list1(char(','), delimited(whitespace, identifier, whitespace))(input)?;
-        let (input, value) = if label == "unit_class" {
-            (input, None)
+        let (input, _) = whitespace(input)?;
+
+        let mut parse_value = label != "unit_class";
+        if label == "entity_class" {
+            // Entity class may or may not have a value. If it has a value it will be an entity
+            // builder. Check if there is the start of an entity builder before going and parsing
+            // the whole thing. This avoids mistakenly parsing the next keyword or command as a
+            // variable in this statement's value.
+            if char::<_, nom::error::Error<_>>('{')(input).is_err() {
+                parse_value = false;
+            }
+        }
+        let (input, value) = if parse_value {
+            let (input, value) =
+                delimited(whitespace, crate::expression::parse_expression, whitespace)(input)?;
+            (input, Some(value))
         } else {
-            opt(delimited(
-                whitespace,
-                crate::expression::parse_expression,
-                whitespace,
-            ))(input)?
+            (input, None)
         };
+
         macro_rules! ret_error {
             () => {
                 return Err(nom::Err::Error(make_error(input, ErrorKind::Alt)))
@@ -104,7 +115,7 @@ mod parse {
                 ("label", None) => ret_error!(),
                 ("value", Some(value)) => MakeValue(names, value),
                 ("value", None) => ret_error!(),
-                _ => unreachable!()
+                _ => unreachable!(),
             },
         ))
     }
@@ -121,6 +132,11 @@ mod parse {
             delimited(whitespace, alt((parse_make, parse_show)), whitespace)(input)?;
         Ok((input, result))
     }
+
+    pub fn parse_statements(input: &str) -> IResult<&str, Vec<Statement>> {
+        let (input, result) = many1(parse_statement)(input)?;
+        Ok((input, result))
+    }
 }
 
-pub use parse::parse_statement;
+pub use parse::{parse_statement, parse_statements};

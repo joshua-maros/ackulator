@@ -87,7 +87,7 @@ impl<I: Eq + Copy + Debug> Composite<I> {
         }
     }
 
-    pub fn pow(&mut self, exp: f64) {
+    pub fn pow(&mut self, _exp: f64) {
         unimplemented!()
     }
 }

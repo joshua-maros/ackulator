@@ -17,6 +17,7 @@ pub enum BinaryOp {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     NumericLiteral(f64),
+    StringLiteral(String),
     LookupName(String),
     UnaryExpr(UnaryOp, Box<Expression>),
     BinaryExpr(Box<Expression>, BinaryOp, Box<Expression>),
@@ -112,7 +113,7 @@ mod parsing {
 
     fn identifier(input: &str) -> IResult<&str, String> {
         let (input, _) = not(collect_digits)(input)?;
-        let (input, value) = take_while1(char::is_alphanumeric)(input)?;
+        let (input, value) = take_while1(|c: char| c.is_alphanumeric() || c == '_')(input)?;
         Ok((input, value.to_owned()))
     }
 
@@ -135,6 +136,8 @@ mod parsing {
             delimited(whitespace, char(','), whitespace),
             entity_builder_field,
         )(input)?;
+        // Trailing comma.
+        let (input, _) = opt(delimited(whitespace, char(','), whitespace))(input)?;
         let mut properties = Vec::new();
         let mut class_names = Vec::new();
         for (name, value) in fields {
@@ -153,12 +156,19 @@ mod parsing {
         ))
     }
 
+    fn string_content(input: &str) -> IResult<&str, Expression> {
+        let (input, string) = take_while(|c| c != '"' && c != '\n')(input)?;
+        let expr = Expression::StringLiteral(string.to_owned());
+        Ok((input, expr))
+    }
+
     /// This should always be called with delimited(whitespace, this, whitespace) because it is a
     /// consistent and efficent position to handle that.
     fn expr_priority50(input: &str) -> IResult<&str, Expression> {
         alt((
             numeric_literal,
             lookup_name,
+            delimited(char('"'), string_content, char('"')),
             delimited(char('('), expr_priority10, char(')')),
             delimited(char('{'), entity_builder, char('}')),
         ))(input)

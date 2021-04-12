@@ -38,11 +38,11 @@ impl Describe for Entity {
         }
         let mut iter = self.properties.iter();
         if let Some((name, value)) = iter.next() {
-            write!(into, "{}: ", name);
+            write!(into, "{}: ", name).unwrap();
             value.describe(into, instance);
             for (name, value) in iter {
                 write!(into, ", ").unwrap();
-                write!(into, "{}: ", name);
+                write!(into, "{}: ", name).unwrap();
                 value.describe(into, instance);
             }
         }

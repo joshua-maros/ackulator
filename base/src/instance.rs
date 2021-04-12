@@ -319,6 +319,14 @@ impl Instance {
         context: AmbiguityResolutionContext,
     ) -> Result<Data, ()> {
         Ok(match &expression {
+            Expression::NumericLiteral(value) => Scalar::new(
+                *value,
+                Precision::Exact,
+                CompositeUnitClass::identity(),
+                CompositeUnit::identity(),
+            )
+            .into(),
+            Expression::StringLiteral(value) => value.clone().into(),
             Expression::ApplyFunction { .. } => unimplemented!(),
             Expression::UnaryExpr(op, rhs) => {
                 let rhs = self.resolve_expression(rhs, context)?;
@@ -362,13 +370,6 @@ impl Instance {
                     return Err(());
                 }
             }
-            Expression::NumericLiteral(value) => Scalar::new(
-                *value,
-                Precision::Exact,
-                CompositeUnitClass::identity(),
-                CompositeUnit::identity(),
-            )
-            .into(),
         })
     }
 }

@@ -29,7 +29,7 @@ macro_rules! make_enum {
 }
 
 impl Describe for String {
-    fn describe(&self, into: &mut String, instance: &Instance) {
+    fn describe(&self, into: &mut String, _instance: &Instance) {
         write!(into, "{}", self).unwrap();
     }
 }
@@ -78,6 +78,7 @@ from_into!(EntityClassId MetaData EntityClass);
 
 from_into!(Scalar ValueData Scalar);
 from_into!(Entity ValueData Entity);
+from_into!(String ValueData String);
 
 impl From<MetaData> for Data {
     fn from(item: MetaData) -> Self {
