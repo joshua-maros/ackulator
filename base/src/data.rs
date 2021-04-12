@@ -34,6 +34,12 @@ impl Describe for String {
     }
 }
 
+impl Describe for bool {
+    fn describe(&self, into: &mut String, _instance: &Instance) {
+        write!(into, "{}", self).unwrap();
+    }
+}
+
 make_enum! {
     MetaData {
         UnitClass(CompositeUnitClass),
@@ -46,6 +52,7 @@ make_enum! {
         Scalar(Scalar),
         Entity(Entity),
         String(String),
+        Bool(bool),
     }
 }
 make_enum! {
@@ -79,6 +86,7 @@ from_into!(EntityClassId MetaData EntityClass);
 from_into!(Scalar ValueData Scalar);
 from_into!(Entity ValueData Entity);
 from_into!(String ValueData String);
+from_into!(bool ValueData Bool);
 
 impl From<MetaData> for Data {
     fn from(item: MetaData) -> Self {

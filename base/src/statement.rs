@@ -71,7 +71,11 @@ mod parse {
         let (input, _) = tag("called")(input)?;
         let (input, names) =
             separated_list1(char(','), delimited(whitespace, identifier, whitespace))(input)?;
-        let (input, _) = whitespace(input)?;
+        let (mut input, _) = whitespace(input)?;
+        if label == "label" {
+            input = tag("for")(input)?.0;
+            input = whitespace(input)?.0;
+        }
 
         let mut parse_value = label != "unit_class";
         if label == "entity_class" {

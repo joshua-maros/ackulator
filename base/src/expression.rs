@@ -12,6 +12,8 @@ pub enum BinaryOp {
     Mul,
     Div,
     Pow,
+    InUnits,
+    IsClass,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -37,7 +39,7 @@ mod parsing {
     use super::*;
     use nom::{
         branch::alt,
-        bytes::complete::{take_while, take_while1},
+        bytes::complete::{tag, take_while, take_while1},
         character::complete::{char, one_of},
         combinator::{not, opt},
         error::make_error,
@@ -126,7 +128,7 @@ mod parsing {
         let (input, _) = whitespace(input)?;
         let (input, name) = identifier(input)?;
         let (input, value) =
-            opt(tuple((whitespace, char(':'), whitespace, expr_priority10)))(input)?;
+            opt(tuple((whitespace, char(':'), whitespace, parse_expression)))(input)?;
         let (input, _) = whitespace(input)?;
         Ok((input, (name, value.map(|v| v.3))))
     }
@@ -169,15 +171,15 @@ mod parsing {
             numeric_literal,
             lookup_name,
             delimited(char('"'), string_content, char('"')),
-            delimited(char('('), expr_priority10, char(')')),
+            delimited(char('('), parse_expression, char(')')),
             delimited(char('{'), entity_builder, char('}')),
         ))(input)
     }
 
     fn fn_args(input: &str) -> IResult<&str, Vec<Expression>> {
-        if let Ok((input, first_arg)) = expr_priority10(input) {
+        if let Ok((input, first_arg)) = parse_expression(input) {
             let mut args = vec![first_arg];
-            let (input, others) = many0(pair(char(','), expr_priority10))(input)?;
+            let (input, others) = many0(pair(char(','), parse_expression))(input)?;
             for (comma, arg) in others {
                 debug_assert_eq!(comma, ',');
                 args.push(arg);
@@ -259,8 +261,25 @@ mod parsing {
         )(input)
     }
 
+    /// "is" and "in" operator.
+    fn expr_priority5(input: &str) -> IResult<&str, Expression> {
+        let (input, first_term) = expr_priority10(input)?;
+        fold_many0(
+            pair(alt((tag("is"), tag("in"))), expr_priority10),
+            first_term,
+            |lhs, (op, rhs): (_, Expression)| {
+                let op = match op {
+                    "is" => BinaryOp::IsClass,
+                    "in" => BinaryOp::InUnits,
+                    _ => unreachable!(),
+                };
+                Expression::BinaryExpr(Box::new(lhs), op, Box::new(rhs))
+            },
+        )(input)
+    }
+
     pub fn parse_expression(input: &str) -> IResult<&str, Expression> {
-        expr_priority10(input)
+        expr_priority5(input)
     }
 }
 

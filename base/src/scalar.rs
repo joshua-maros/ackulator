@@ -89,8 +89,12 @@ impl Scalar {
         &self.display_unit
     }
 
+    pub fn set_display_unit(&mut self, display_unit: CompositeUnit) {
+        self.display_unit = display_unit;
+    }
+
     pub fn display_value(&self, instance: &Instance) -> f64 {
-        self.value * self.display_unit.base_ratio(instance)
+        self.value / self.display_unit.base_ratio(instance)
     }
 
     pub fn raw_value(&self) -> f64 {

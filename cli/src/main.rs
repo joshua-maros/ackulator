@@ -20,7 +20,10 @@ make base_unit called Second, Seconds {
     partial_metric,
 }
 
-show Length ^ 3
+make label called Velocity for Length / Time 
+make label called Acceleration for Velocity / Time
+
+show (1 * Meter / Second ^ 2) is Acceleration
 "#;
 
 fn main() {

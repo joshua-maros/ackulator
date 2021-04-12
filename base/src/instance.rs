@@ -270,32 +270,48 @@ impl Instance {
         use ValueData::*;
         match (lhs, rhs) {
             (Meta(EntityClass(..)), _) => Err(()),
-            (_, Meta(EntityClass(..))) => Err(()),
-            (Meta(Unit(..)), Meta(UnitClass(..))) => Err(()),
-            (Meta(UnitClass(..)), Meta(Unit(..))) => Err(()),
-            (Value(Entity(..)), _) => Err(()),
             (_, Value(Entity(..))) => Err(()),
             (Value(String(..)), _) => Err(()),
             (_, Value(String(..))) => Err(()),
+            (_, Value(Bool(..))) => Err(()),
+            (Value(Bool(..)), _) => Err(()),
+
+            (Value(Entity(lhs)), Meta(EntityClass(rhs))) => match op {
+                IsClass => Ok((lhs.classes.contains(&rhs)).into()),
+                _ => Err(()),
+            },
+            (Value(Entity(..)), _) => Err(()),
+            (_, Meta(EntityClass(..))) => Err(()),
+
+            (Meta(Unit(lhs)), Meta(UnitClass(rhs))) => match op {
+                IsClass => Ok((lhs.unit_class(self) == rhs).into()),
+                _ => Err(()),
+            },
+            (Meta(UnitClass(..)), Meta(Unit(..))) => Err(()),
 
             (Meta(Unit(lhs)), Meta(Unit(rhs))) => match op {
-                Add | Sub | Pow => Err(()),
                 Mul => Ok((lhs * rhs).into()),
                 Div => Ok((lhs / rhs).into()),
+                _ => Err(()),
             },
             (Meta(UnitClass(lhs)), Meta(UnitClass(rhs))) => match op {
-                Add | Sub | Pow => Err(()),
                 Mul => Ok((lhs * rhs).into()),
                 Div => Ok((lhs / rhs).into()),
+                _ => Err(()),
             },
 
             (Value(Scalar(lhs)), Meta(Unit(rhs))) => match op {
-                Add | Sub | Pow => Err(()),
                 Mul => Ok((lhs * rhs.as_scalar(self)).into()),
                 Div => Ok((lhs / rhs.as_scalar(self)).into()),
+                InUnits => {
+                    let mut lhs = lhs;
+                    lhs.set_display_unit(rhs);
+                    Ok(lhs.into())
+                }
+                IsClass => Err(()),
+                _ => Err(()),
             },
             (Meta(Unit(lhs)), Value(Scalar(rhs))) => match op {
-                Add | Sub => Err(()),
                 Mul => Ok((lhs.as_scalar(self) * rhs).into()),
                 Div => Ok((lhs.as_scalar(self) / rhs).into()),
                 Pow => {
@@ -303,18 +319,23 @@ impl Instance {
                     lhs.pow(rhs.display_value(self));
                     Ok(lhs.into())
                 }
+                _ => Err(()),
             },
             (Meta(UnitClass(lhs)), Value(Scalar(rhs))) => match op {
-                Add | Sub | Mul | Div => Err(()),
                 Pow => {
                     let mut lhs = lhs;
                     lhs.pow(rhs.display_value(self));
                     Ok(lhs.into())
                 }
+                _ => Err(()),
             },
-            (Value(Scalar(..)), Meta(UnitClass(..))) => Err(()),
+            (Value(Scalar(lhs)), Meta(UnitClass(rhs))) => match op {
+                IsClass => Ok((lhs.unit() == &rhs).into()),
+                _ => Err(()),
+            },
 
             (Value(Scalar(lhs)), Value(Scalar(rhs))) => match op {
+                IsClass | InUnits => Err(()),
                 Add => lhs.add(&rhs).map(Into::into),
                 Sub => lhs.sub(&rhs).map(Into::into),
                 Mul => Ok((lhs * rhs).into()),
